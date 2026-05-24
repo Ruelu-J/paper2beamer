@@ -1,0 +1,53 @@
+% Minimal default Beamer theme for paper2beamer
+\mode<presentation>
+
+% Requirements
+\RequirePackage{tikz}
+
+% Settings
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{caption}[numbered]
+
+% Colors
+\definecolor{primary}{RGB}{0, 102, 204}
+\definecolor{textgray}{RGB}{80, 80, 80}
+
+\setbeamercolor{title}{fg=primary}
+\setbeamercolor{frametitle}{fg=primary}
+\setbeamercolor{structure}{fg=primary}
+\setbeamercolor{normal text}{fg=textgray}
+
+% Fonts
+\setbeamerfont{title}{size=\Large,series=\bfseries}
+\setbeamerfont{frametitle}{size=\large,series=\bfseries}
+\setbeamerfont{section in toc}{size=\normalsize,series=\bfseries}
+
+% Title page
+\defbeamertemplate*{title page}{default}[1][]{%
+  \centering
+  \vspace{2cm}
+  {\usebeamerfont{title}\usebeamercolor[fg]{title}\inserttitle\par}
+  \vspace{0.5cm}
+  {\usebeamerfont{author}\insertauthor\par}
+  \vspace{0.3cm}
+  {\usebeamerfont{date}\insertdate\par}
+  \vfill
+}
+
+% Frame title
+\defbeamertemplate*{frametitle}{default}[1][]{%
+  \vspace{0.5cm}
+  {\usebeamerfont{frametitle}\usebeamercolor[fg]{frametitle}\insertframetitle\par}
+  \vspace{0.2cm}
+  \hrule
+  \vspace{0.3cm}
+}
+
+% Itemize
+\setbeamertemplate{itemize item}{\small\raisebox{0.15em}{$\bullet$}}
+\setbeamertemplate{itemize subitem}{--}
+
+% Footnotes
+\setbeamerfont{footnote}{size=\tiny}
+
+\mode<all>

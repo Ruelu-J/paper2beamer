@@ -1,0 +1,48 @@
+{% extends "base.html.j2" %}
+{% block title %}Convert Paper{% endblock %}
+{% block content %}
+<section>
+    <h1>Convert Paper to Beamer</h1>
+    <p>Upload a PDF of your math/statistics paper and get a Beamer presentation.</p>
+
+    <form id="upload-form" action="/api/upload" method="post" enctype="multipart/form-data"
+          hx-post="/api/upload" hx-target="#result" hx-swap="innerHTML">
+
+        <div class="form-group">
+            <label for="file">PDF Paper</label>
+            <input type="file" id="file" name="file" accept=".pdf" required>
+            <small>Maximum {{ max_upload_mb }}MB</small>
+        </div>
+
+        <div class="form-group">
+            <label for="mode">Output Mode</label>
+            <select id="mode" name="mode">
+                <option value="full">Full Paper (all sections, figures, tables)</option>
+                <option value="abstract">Abstract Only</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="template_id">Beamer Template (optional)</label>
+            <select id="template_id" name="template_id">
+                <option value="">Default Theme</option>
+            </select>
+            <small><a href="/templates">Manage templates</a></small>
+        </div>
+
+        <button type="submit" class="btn-primary">Convert to Beamer</button>
+    </form>
+
+    <div id="result" class="result-area">
+        <div class="info-box">
+            <strong>How it works:</strong>
+            <ol>
+                <li>Upload your PDF paper</li>
+                <li>We extract content using MinerU (formulas, tables, figures)</li>
+                <li>Content is converted to a Beamer presentation</li>
+                <li>Download the ZIP with .tex, .pdf, .bib, and images</li>
+            </ol>
+        </div>
+    </div>
+</section>
+{% endblock %}

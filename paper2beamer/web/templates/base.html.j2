@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>paper2beamer - {% block title %}Home{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="brand">paper2beamer</a>
+        <div class="nav-links">
+            <a href="/">Convert</a>
+            <a href="/templates">Templates</a>
+            <a href="/settings">Settings</a>
+        </div>
+    </nav>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    <footer>
+        <p>paper2beamer — Convert academic papers into Beamer presentations</p>
+    </footer>
+</body>
+</html>

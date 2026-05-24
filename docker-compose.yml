@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./templates:/app/templates
+    environment:
+      - MINERU_MODE=local
+      - MINERU_API_URL=http://mineru:8001
+      - DATABASE_URL=sqlite+aiosqlite:///app/data/paper2beamer.db
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+    depends_on:
+      - mineru
+    restart: unless-stopped
+
+  mineru:
+    image: opendatalab/mineru:latest-cpu
+    ports:
+      - "8001:8001"
+    volumes:
+      - mineru_data:/tmp/mineru
+    environment:
+      - MINERU_API_TOKEN=local-dev-token
+    restart: unless-stopped
+
+volumes:
+  mineru_data:

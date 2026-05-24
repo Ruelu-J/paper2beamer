@@ -1,0 +1,14 @@
+{% extends "base.html.j2" %}
+{% block title %}Job {{ job_id }}{% endblock %}
+{% block content %}
+<section>
+    <h1>Job Status</h1>
+    <p>Job ID: <code>{{ job_id }}</code></p>
+
+    <div hx-get="/api/jobs/{{ job_id }}" hx-trigger="load, every 3s" hx-swap="innerHTML">
+        <div class="spinner">Loading job status...</div>
+    </div>
+
+    <p><a href="/">&larr; Convert another paper</a></p>
+</section>
+{% endblock %}

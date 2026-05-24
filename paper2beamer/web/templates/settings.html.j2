@@ -1,0 +1,50 @@
+{% extends "base.html.j2" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<section>
+    <h1>Settings</h1>
+
+    <h2>MinerU Configuration</h2>
+    <form id="settings-form" hx-put="/api/settings" hx-target="#settings-result" hx-swap="innerHTML">
+
+        <div class="form-group">
+            <label for="mineru_mode">MinerU Mode</label>
+            <select id="mineru_mode" name="mineru_mode">
+                <option value="local">Local (mineru-api server)</option>
+                <option value="cli">Local CLI (mineru command)</option>
+                <option value="cloud">Cloud (mineru.net API)</option>
+            </select>
+            <small>Local requires a running MinerU installation. Cloud requires an API key.</small>
+        </div>
+
+        <div class="form-group">
+            <label for="mineru_api_url">Local API URL</label>
+            <input type="text" id="mineru_api_url" name="mineru_api_url" value="http://localhost:8001">
+            <small>Only used when mode is "Local"</small>
+        </div>
+
+        <div class="form-group">
+            <label for="mineru_api_key">MinerU API Key</label>
+            <input type="password" id="mineru_api_key" name="mineru_api_key" placeholder="Enter API key">
+            <small>Get a free key at <a href="https://mineru.net/apiManage/token" target="_blank">mineru.net</a></small>
+        </div>
+
+        <div class="form-group">
+            <label for="tex_engine">LaTeX Engine</label>
+            <select id="tex_engine" name="tex_engine">
+                <option value="pdflatex">pdflatex</option>
+                <option value="xelatex">xelatex</option>
+                <option value="lualatex">lualatex</option>
+            </select>
+        </div>
+
+        <button type="submit" class="btn-primary">Save Settings</button>
+    </form>
+
+    <div id="settings-result"></div>
+
+    <div hx-get="/api/settings" hx-trigger="load" hx-swap="innerHTML" id="current-settings">
+        <p>Loading current settings...</p>
+    </div>
+</section>
+{% endblock %}

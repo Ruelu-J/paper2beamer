@@ -1,0 +1,36 @@
+{% extends "base.html.j2" %}
+{% block title %}Templates{% endblock %}
+{% block content %}
+<section>
+    <h1>Beamer Templates</h1>
+    <p>Upload custom Beamer themes as ZIP files. The ZIP must contain at least one <code>.sty</code> file.</p>
+
+    <form id="template-form" action="/api/templates/upload" method="post" enctype="multipart/form-data"
+          hx-post="/api/templates/upload" hx-target="#template-result" hx-swap="innerHTML">
+
+        <div class="form-group">
+            <label for="tpl-file">Template ZIP</label>
+            <input type="file" id="tpl-file" name="file" accept=".zip" required>
+        </div>
+
+        <div class="form-group">
+            <label for="tpl-name">Template Name</label>
+            <input type="text" id="tpl-name" name="name" placeholder="My University Theme" required>
+        </div>
+
+        <div class="form-group">
+            <label for="tpl-desc">Description (optional)</label>
+            <input type="text" id="tpl-desc" name="description" placeholder="Official university Beamer theme">
+        </div>
+
+        <button type="submit" class="btn-primary">Install Template</button>
+    </form>
+
+    <div id="template-result"></div>
+
+    <h2>Installed Templates</h2>
+    <div hx-get="/api/templates" hx-trigger="load" hx-swap="innerHTML">
+        <p>Loading templates...</p>
+    </div>
+</section>
+{% endblock %}
