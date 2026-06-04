@@ -135,10 +135,160 @@ class LocalMinerUExtractor(BaseExtractor):
 
 
 class CloudMinerUExtractor(BaseExtractor):
-    """Uses the mineru-open-sdk to call the MinerU cloud API (token-based)."""
+    """Uses the mineru-open-sdk to call the MinerU cloud API (token-based).
+
+    On Windows + Python 3.10 the SSL handshake to cdn-mineru.openxlab.org.cn
+    (the CDN that hosts extracted results) can fail with ``_ssl.c:1007``.
+    We monkey-patch the SDK's download method to retry with ``verify=False``
+    when that occurs — everything else (auth, upload, polling) hits
+    mineru.net which works fine with normal SSL.
+    """
 
     def __init__(self, api_key: str = ""):
         self.api_key = api_key
+
+    # ------------------------------------------------------------------
+    # SSL workaround for cdn-mineru.openxlab.org.cn download
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _patch_download_for_cdn_ssl():
+        """Wrap ApiClient.download so it retries without SSL verification
+        when the CDN host's certificate fails the handshake on Windows."""
+        try:
+            import mineru._api as _api_mod
+        except ImportError:
+            return None  # SDK not installed
+
+        _orig_download = _api_mod.ApiClient.download
+
+        def _ssl_safe_download(self, url: str) -> bytes:
+            try:
+                return _orig_download(self, url)
+            except Exception as exc:
+                err_str = str(exc).lower()
+                if ('ssl' in err_str or '_ssl' in err_str
+                        or 'connecterror' in err_str):
+                    import httpx
+                    import warnings
+                    warnings.warn(
+                        f"SSL handshake to CDN failed ({exc}), "
+                        f"retrying with verify=False for download only.",
+                        RuntimeWarning,
+                    )
+                    resp = httpx.get(
+                        url,
+                        timeout=httpx.Timeout(30.0, read=300.0),
+                        follow_redirects=True,
+                        verify=False,
+                    )
+                    resp.raise_for_status()
+                    return resp.content
+                raise
+
+        _api_mod.ApiClient.download = _ssl_safe_download  # type: ignore[assignment]
+        return _orig_download
+
+    @staticmethod
+    def _unpatch_download(orig):
+        """Restore the original download method."""
+        if orig is None:
+            return
+        try:
+            import mineru._api as _api_mod
+            _api_mod.ApiClient.download = orig  # type: ignore[assignment]
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    # HTTP tracing (debug aid — can be removed once stable)
+    # ------------------------------------------------------------------
+
+    def _install_http_trace(self):
+        """Monkey-patch httpx to trace every HTTP request made by mineru SDK."""
+        try:
+            import httpx as _httpx
+        except ImportError:
+            return
+
+        _orig_send = _httpx.Client.send
+        _trace_lines: list[str] = []
+
+        def _patched_send(client_self, request, *args, **kwargs):
+            _trace_lines.append(f"[TRACE] >>> {request.method} {request.url}")
+            try:
+                resp = _orig_send(client_self, request, *args, **kwargs)
+                _trace_lines.append(
+                    f"[TRACE] <<< {resp.status_code} "
+                    f"(HTTP/{resp.http_version})"
+                )
+                return resp
+            except Exception as exc:
+                _trace_lines.append(
+                    f"[TRACE] <<< EXCEPTION at {request.method} "
+                    f"{request.url.host}: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                raise
+
+        _httpx.Client.send = _patched_send  # type: ignore[assignment]
+
+        import httpx as _httpx_module
+        _orig_put = _httpx_module.put
+        _orig_get = _httpx_module.get
+
+        def _patched_put(url, *args, **kwargs):
+            _trace_lines.append(f"[TRACE-PUT] >>> {url}")
+            try:
+                resp = _orig_put(url, *args, **kwargs)
+                _trace_lines.append(f"[TRACE-PUT] <<< {resp.status_code}")
+                return resp
+            except Exception as exc:
+                _trace_lines.append(
+                    f"[TRACE-PUT] <<< EXCEPTION: {type(exc).__name__}: {exc}"
+                )
+                raise
+
+        def _patched_get(url, *args, **kwargs):
+            _trace_lines.append(f"[TRACE-GET] >>> {url}")
+            try:
+                resp = _orig_get(url, *args, **kwargs)
+                _trace_lines.append(f"[TRACE-GET] <<< {resp.status_code}")
+                return resp
+            except Exception as exc:
+                _trace_lines.append(
+                    f"[TRACE-GET] <<< EXCEPTION: {type(exc).__name__}: {exc}"
+                )
+                raise
+
+        _httpx_module.put = _patched_put  # type: ignore[assignment]
+        _httpx_module.get = _patched_get  # type: ignore[assignment]
+
+        self._trace_lines = _trace_lines
+        self._orig_send = _orig_send
+        self._orig_put = _orig_put
+        self._orig_get = _orig_get
+
+    def _uninstall_http_trace(self):
+        """Restore original httpx functions."""
+        try:
+            import httpx as _httpx
+            if hasattr(self, '_orig_send') and self._orig_send:
+                _httpx.Client.send = self._orig_send
+        finally:
+            pass
+        try:
+            import httpx as _httpx_module
+            if hasattr(self, '_orig_put') and self._orig_put:
+                _httpx_module.put = self._orig_put
+            if hasattr(self, '_orig_get') and self._orig_get:
+                _httpx_module.get = self._orig_get
+        finally:
+            pass
+
+    # ------------------------------------------------------------------
+    # Main extraction entry point
+    # ------------------------------------------------------------------
 
     async def extract(self, pdf_path: str | Path, output_dir: str | Path) -> ExtractResult:
         try:
@@ -156,14 +306,31 @@ class CloudMinerUExtractor(BaseExtractor):
 
         client = MinerU(self.api_key) if self.api_key else MinerU()
 
-        # Use token-based extract (not flash_extract) for reliable results
-        result = await asyncio.to_thread(
-            client.extract,
-            str(pdf_path),
-            formula=True,
-            table=True,
-            timeout=600,
-        )
+        # Work around Windows SSL issue when downloading results from
+        # cdn-mineru.openxlab.org.cn (the API upload/poll uses mineru.net
+        # which works fine).
+        _orig_download = self._patch_download_for_cdn_ssl()
+        self._install_http_trace()
+
+        try:
+            result = await asyncio.to_thread(
+                client.extract,
+                str(pdf_path),
+                formula=True,
+                table=True,
+                timeout=600,
+            )
+        except Exception as exc:
+            if hasattr(self, '_trace_lines') and self._trace_lines:
+                print("=" * 60, flush=True)
+                print("MinerU HTTP trace (last call failed):", flush=True)
+                for line in self._trace_lines:
+                    print(line, flush=True)
+                print("=" * 60, flush=True)
+            raise
+        finally:
+            self._uninstall_http_trace()
+            self._unpatch_download(_orig_download)
 
         if result.state != "done":
             error_msg = result.error or f"state={result.state}"
