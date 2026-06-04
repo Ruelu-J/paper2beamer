@@ -20,8 +20,8 @@ Convert academic papers (PDF) into professional Beamer (LaTeX) presentations —
 
 - Python 3.10+
 - LaTeX distribution with `latexmk` ([TeX Live](https://tug.org/texlive/) recommended)
-- [MinerU Cloud API key](https://mineru.net/apiManage/token) (free)
-- (Optional) LLM API key for better slide quality ([SiliconFlow](https://siliconflow.cn) has a free tier)
+- [MinerU Cloud API key](https://mineru.net/apiManage/token) (free registration)
+- LLM API key (e.g. [SiliconFlow](https://siliconflow.cn), [DeepSeek](https://platform.deepseek.com), or [OpenAI](https://platform.openai.com))
 
 ### Install
 
@@ -31,19 +31,35 @@ cd paper2beamer
 pip install -e .
 ```
 
-### Run
+### Web UI (recommended)
+
+The web UI lets you configure everything on the page — no `.env` file needed.
 
 ```bash
-# 1. Configure
+paper2beamer serve --port 8000
+# Open http://localhost:8000
+```
+
+Then fill in your API keys directly in the sidebar settings. The server stores them in memory for the session.
+
+### CLI
+
+The CLI reads configuration from environment variables. First copy and edit `.env`:
+
+```bash
 cp .env.example .env
 # Edit .env: set MINERU_API_KEY, LLM_API_KEY, TEX_ENGINE
 
-# 2. Start web server
-paper2beamer serve --port 8000
-# Open http://localhost:8000
-
-# 3. Or use CLI
+# Then run:
 paper2beamer convert paper.pdf --mode full -o output.zip
+```
+
+Or pass settings directly:
+
+```bash
+paper2beamer convert paper.pdf --mode full \
+    --mineru-mode cloud --mineru-key $MINERU_KEY \
+    --llm-model deepseek-ai/DeepSeek-V3.2 -o output.zip
 ```
 
 ### Docker
@@ -101,16 +117,14 @@ SECRET_KEY=change-me-in-production
 
 ### LLM Provider Setup
 
-paper2beamer uses the OpenAI-compatible `/chat/completions` endpoint. Any provider works:
+paper2beamer uses the OpenAI-compatible `/chat/completions` endpoint. Any provider that supports this API works. Common options:
 
-| Provider | `LLM_BASE_URL` | Free tier |
-|----------|---------------|-----------|
-| [SiliconFlow](https://siliconflow.cn) | `https://api.siliconflow.cn/v1` | Yes |
-| [OpenAI](https://platform.openai.com) | `https://api.openai.com/v1` | No |
-| [DeepSeek](https://platform.deepseek.com) | `https://api.deepseek.com/v1` | No |
-| [Groq](https://console.groq.com) | `https://api.groq.com/openai/v1` | Yes |
+- [SiliconFlow](https://siliconflow.cn) — `LLM_BASE_URL=https://api.siliconflow.cn/v1`
+- [DeepSeek](https://platform.deepseek.com) — `LLM_BASE_URL=https://api.deepseek.com/v1`
+- [OpenAI](https://platform.openai.com) — `LLM_BASE_URL=https://api.openai.com/v1`
+- [Groq](https://console.groq.com) — `LLM_BASE_URL=https://api.groq.com/openai/v1`
 
-Enter any model ID your provider supports in the web UI (text field, not dropdown).
+Set `LLM_MODEL` to any model ID your provider supports. In the web UI, type the model name directly in the text field.
 
 ## Web UI
 
