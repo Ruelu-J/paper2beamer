@@ -786,7 +786,7 @@ class LLMBeamerConverter:
                 for block in sub.blocks:
                     all_items.append((sub.title, sub.level, block))
 
-        MAX_BLOCKS = 30  # blocks per LLM call
+        MAX_BLOCKS = 50  # blocks per LLM call (fewer calls = less overhead)
 
         # Chunk the items, respecting that markers should stay with their blocks
         chunks = self._chunk_items(all_items, MAX_BLOCKS)
@@ -838,29 +838,25 @@ class LLMBeamerConverter:
         # Batches 2..N: run in PARALLEL (they are independent of each other)
         remaining_chunks = chunks[1:]
         if remaining_chunks:
+            # Use smaller template excerpt for continuation batches
+            _body_short = body_excerpt[:2000] if len(body_excerpt) > 2000 else body_excerpt
+
             async def _process_chunk(chunk):
                 chunk_content = _build_chunk_content(chunk)
                 prompt = (
-                    f"You are continuing a Beamer presentation. "
-                    f"Convert ALL of the following content into frames.\n\n"
-                    f"## TEMPLATE STYLE (follow these patterns)\n"
-                    f"```latex\n{body_excerpt if body_excerpt else '% Standard beamer'}\n```\n\n"
-                    f"## CONTENT TO CONVERT (every block must appear — do NOT summarize or skip)\n"
-                    f"{chunk_content}\n\n"
-                    f"CRITICAL RULES:\n"
-                    f"- ALL text MUST be in English (original paper language). NEVER translate.\n"
-                    f"- EVERY \\begin{{frame}} MUST have a matching \\end{{frame}}. "
-                    f"Never forget \\end{{frame}} — especially after "
-                    f"\\begin{{enumerate}}[(...)] and \\begin{{equation}} blocks.\n"
+                    f"Continue a Beamer presentation. Convert ALL content into frames.\n\n"
+                    f"Style:\n```latex\n{_body_short if _body_short else '% Standard'}\n```\n\n"
+                    f"Content:\n{chunk_content}\n\n"
+                    f"Rules:\n"
+                    f"- English only. NEVER translate.\n"
+                    f"- EVERY \\begin{{frame}} MUST have \\end{{frame}}\n"
                     f"- Do NOT generate title slide, TOC, or \\end{{document}}\n"
-                    f"- SECTION HIERARCHY (CRITICAL): Each [USE \\cmd{{Title}}] line tells you "
-                    f"EXACTLY which LaTeX section command to emit. Copy it verbatim — do NOT "
-                    f"promote \\subsection to \\section or demote \\section to \\subsection. "
-                    f"The hierarchy is pre-computed from the paper's numbered headings.\n"
-                    f"- Convert EVERY [TEXT], [FORMULA], [FIGURE], [TABLE], [ITEM], [ENUM]\n"
-                    f"- Keep ALL \\cite{{...}} references exactly as written\n"
-                    f"- Use \\begin{{frame}}{{Title}} format\n"
-                    f"- Output ONLY frame LaTeX in ```latex ... ``` block"
+                    f"- [USE \\section/\\subsection/\\subsubsection{{X}}]: emit EXACTLY that command, "
+                    f"never change the level\n"
+                    f"- Convert EVERY [TEXT]/[FORMULA]/[TABLE]/[ITEM]/[ENUM]\n"
+                    f"- Keep ALL \\cite{{...}} references\n"
+                    f"- \\begin{{frame}}{{Title}} format, plain text titles\n"
+                    f"- Output ONLY ```latex ... ``` block"
                 )
                 response = await self._call_llm(prompt)
                 return self._extract_body(response) or ""
@@ -872,17 +868,8 @@ class LLMBeamerConverter:
                 if chunk_tex:
                     body += "\n" + chunk_tex
 
-        # Final batch: thank-you slide + \end{document}
-        final_prompt = (
-            "Conclude this Beamer presentation. Generate a thank-you / Q&A "
-            "frame, then \\end{{document}}. Maintain the same template style.\n\n"
-            "Output in ```latex ... ``` block:"
-        )
-        final_response = await self._call_llm(final_prompt, max_tokens=1024)
-        final_tex = self._extract_body(final_response)
-        if final_tex:
-            body += "\n" + final_tex
-
+        # No separate final batch — the last content chunk already ends
+        # the presentation naturally. \end{document} is appended by _convert().
         return self._fix_llm_errors(body)
 
     @staticmethod
@@ -925,69 +912,35 @@ class LLMBeamerConverter:
         max_content = 60000
         paper_excerpt = paper_content[:max_content] if len(paper_content) > max_content else paper_content
 
-        return f"""You are an expert LaTeX Beamer typesetter. Your job is to CONVERT a paper into Beamer frames — NOT to summarize or edit it. Every piece of content from the paper MUST appear in the output.
+        return f"""You are a LaTeX Beamer typesetter. Convert the paper content below into Beamer frames. Output ONLY body LaTeX in ```latex ``` block.
 
-The preamble is already provided separately — do NOT generate preamble, \\documentclass, or \\usepackage commands.
+Language: English only. Do NOT translate.
 
-## LANGUAGE RULE (CRITICAL)
-Keep ALL text in English — the ORIGINAL language of the paper. The template may include CJK fonts or packages; these are for styling only. NEVER translate content to Chinese, Japanese, or any other language. Every paragraph, section title, and frame title must be in English.
-
-## TEMPLATE FRAME STYLE (follow these patterns for frame structure, blocks, colors)
+Style reference (follow frame structure, colors, block styling):
 ```latex
-{body_excerpt if body_excerpt else '% No frame examples — use standard beamer style'}
+{body_excerpt if body_excerpt else '% Standard beamer'}
 ```
 
-## PAPER CONTENT (CONVERT ALL OF THIS INTO FRAMES — DO NOT OMIT ANYTHING)
+Content to convert:
 {paper_excerpt}
 
-## YOUR ROLE: Typesetter & Organizer, NOT Editor
-
-You have THREE responsibilities:
-1. **Convert to LaTeX:** Format every paragraph, formula, figure, table, and list into proper Beamer LaTeX.
-2. **Organize into frames:** Decide where each piece of content goes — which section/subsection, where to break frames. Use your judgment for frame titles that reflect the content.
-3. **Handle layout:** If a formula is too wide, wrap it. If a table has many columns, use \\resizebox. If content overflows a frame, split it.
-
-You MUST NOT:
-- Skip or omit any content (every [TEXT], [FORMULA], [FIGURE], [TABLE], [ITEM], [ENUM] block must appear)
-- Summarize or rewrite paragraphs — keep the original wording
-- Invent new content or conclusions not in the paper
-- Generate a references/bibliography section
-
-## RULES
-
-1. **Start with** \\titlepage inside a frame, then a \\tableofcontents frame.
-
-2. **Content conversion (PRESERVE EVERY BLOCK):**
-   - [TEXT] paragraphs → frame text (keep ALL sentences)
-   - [ITEM] / [ENUM] → \\begin{{itemize}} or \\begin{{enumerate}}
-   - [FORMULA] → \\begin{{equation*}}...\\end{{equation*}} or inline $...$ — copy EXACTLY
-   - [FIGURE] → \\includegraphics[width=\\textwidth,height=0.6\\textheight,keepaspectratio]{{images/filename}} (use images/ NOT figs/)
-   - [TABLE] → booktabs table with \\toprule, \\midrule, \\bottomrule; use \\resizebox{{\\textwidth}}{{!}}{{...}} if wide
-   - [USE \\section{{Title}}] / [USE \\subsection{{Title}}] / [USE \\subsubsection{{Title}}] →
-     emit EXACTLY that LaTeX command with EXACTLY that title. The hierarchy is pre-computed
-     from the paper's numbered headings (1. → section, 1.2. → subsection, etc.).
-     NEVER promote a \\subsection to \\section or demote a \\section to \\subsection.
-   - [HEADING Lx] → only if no [USE ...] tag; use the level x to pick \\section / \\subsection
-
-3. **Frame format:**
-   - Use \\begin{{frame}}{{Descriptive Title}} — title in braces, never empty
-   - CRITICAL: EVERY \\begin{{frame}} MUST end with \\end{{frame}}. This is the #1 error. After \\begin{{enumerate}}[(...)] or \\begin{{equation}} blocks, always double-check you wrote \\end{{frame}}.
-   - Frame titles must be PLAIN TEXT or simple math ($...$). NEVER use commands with braces in titles (no \\mathcal{{H}}, \\mathbf{{x}}, \\text{{...}}, \\widehat{{f}}, etc.). Use plain alternatives: $f$ instead of $\\widehat{{f}}$, $\\mathcal{{H}}$ → write \"cal H\" or just $H$.
-   - One topic per frame; if a frame is too full, split into multiple frames with "(Continued)" or numbered subtitles
-   - Keep ALL \\cite{{...}} references exactly as provided
-
-4. **Structure (CRITICAL — pre-computed hierarchy, just copy):**
-   - The content uses [USE \\section{{...}}] / [USE \\subsection{{...}}] / [USE \\subsubsection{{...}}]
-     markers. Emit EXACTLY those commands in EXACTLY that order.
-   - Do NOT reorder, skip, merge, or re-level any section command.
-   - Example: if you see [USE \\subsection{{Related Works}}], output \\subsection{{Related Works}},
-     never \\section{{Related Works}}.
-
-5. **Ending:** Thank-you slide, then \\end{{document}}.
-
-6. **Output format:** Output ONLY the body LaTeX (from first frame to \\end{{document}}). Wrap in ```latex ... ```.
-
-Generate now — remember: CONVERT everything, OMIT nothing:"""
+Rules:
+- [TEXT] → frame text, keep ALL sentences
+- [ITEM]/[ENUM] → \\begin{{itemize}} or \\begin{{enumerate}}
+- [FORMULA] → \\begin{{equation*}}...\\end{{equation*}} or inline $...$, copy EXACTLY
+- [TABLE] → booktabs table with \\toprule, \\midrule, \\bottomrule; use \\resizebox{{\\textwidth}}{{!}}{{...}} if wide
+- [FIGURE] → \\includegraphics[width=\\textwidth,height=0.6\\textheight,keepaspectratio]{{images/filename}}
+- [USE \\section{{X}}] / [USE \\subsection{{X}}] / [USE \\subsubsection{{X}}] →
+  emit EXACTLY that LaTeX command with EXACTLY that title. NEVER change the section level.
+- Frame format: \\begin{{frame}}{{Descriptive Title}} ... \\end{{frame}}
+- CRITICAL: EVERY \\begin{{frame}} MUST have \\end{{frame}}
+- Frame titles: PLAIN TEXT only (no \\cmd{{}} commands in braces). Use $x$ for math in titles.
+- ONE topic per frame; split if too full (use "Title (continued)" for overflow)
+- Preserve ALL \\cite{{...}} references
+- Start with \\titlepage frame + \\tableofcontents frame
+- End with \\end{{document}}
+- NO preamble, NO \\documentclass, NO \\usepackage, NO \\begin{{document}}
+- CONVERT everything, OMIT nothing."""
 
     def _build_abstract_prompt(
         self,
