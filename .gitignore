@@ -11,3 +11,4 @@ pdf/
 .idea/
 .vscode/
 *.log
+e2e_output/

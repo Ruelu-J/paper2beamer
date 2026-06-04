@@ -1,9 +1,14 @@
 """End-to-end test: drives worker.process_job exactly like the web API
-would. Verifies the new compile_and_fix loop runs and produces a clean
+would. Verifies the compile_and_fix loop runs and produces a clean
 build.log + presentation.pdf + presentation.zip.
 
 Run: python test_e2e.py
 Outputs land in e2e_output/<job_id>/.
+
+Prerequisites:
+    - .env configured with MINERU_API_KEY and LLM_API_KEY
+    - latexmk on PATH (or set LATEXMK_PATH env var)
+    - A template installed in the DB (or set TEMPLATE_ID env var)
 """
 import asyncio
 import os
@@ -14,11 +19,10 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-# Put MiKTeX on PATH so latexmk is found.
-os.environ['PATH'] = (
-    'C:/Users/17576/AppData/Local/Programs/MiKTeX/miktex/bin/x64;'
-    + os.environ.get('PATH', '')
-)
+# If latexmk is not on PATH, add it here
+_LATEXMK_PATH = os.environ.get('LATEXMK_PATH', '')
+if _LATEXMK_PATH:
+    os.environ['PATH'] = _LATEXMK_PATH + os.pathsep + os.environ.get('PATH', '')
 
 # Redirect output dir so we can keep this run separate.
 os.environ['OUTPUT_DIR'] = './e2e_output'
@@ -29,9 +33,9 @@ from paper2beamer.db.models import Job, JobStatus
 from paper2beamer.worker.tasks import process_job
 
 
-TEMPLATE_ID = "c0479bae-2779-4fae-91e6-3206f027ee8e"  # SUDA, just installed
-PDF_PATH = "pdf/2309.02211v5.pdf"
-MODE = "full"
+TEMPLATE_ID = os.environ.get("TEMPLATE_ID", "")  # Optional: UUID of installed template
+PDF_PATH = os.environ.get("PDF_PATH", "pdf/2309.02211v5.pdf")
+MODE = os.environ.get("MODE", "full")
 
 
 async def main():

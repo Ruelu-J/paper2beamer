@@ -41,21 +41,22 @@ docker-compose up
 ## Architecture
 
 ```
-PDF → MinerU → Markdown → Parser → Document → Converter → Beamer LaTeX → Splitter → Compiler → PDF → ZIP
+PDF → MinerU → Markdown → Parser → Document → LLM Converter → Beamer LaTeX → Compiler → PDF → ZIP
 ```
 
 ### Key Modules
 
 - `paper2beamer/core/models.py` — Domain dataclasses: Document, Section, Block, ExtractResult
-- `paper2beamer/core/extractor.py` — MinerU abstraction (local API, CLI, cloud SDK)
-- `paper2beamer/core/parser.py` — MinesU Markdown → structured Document
-- `paper2beamer/core/converter.py` — Document → Beamer LaTeX source
+- `paper2beamer/core/extractor.py` — MinerU abstraction (local API, CLI, cloud SDK with SSL workaround)
+- `paper2beamer/core/parser.py` — MinerU Markdown → structured Document
+- `paper2beamer/core/converter.py` — Document → Beamer LaTeX source (programmatic)
+- `paper2beamer/core/llm_converter.py` — LLM-powered Beamer converter (template-aware, batched, compile-and-fix)
 - `paper2beamer/core/splitter.py` — Frame splitting with line estimation heuristic
 - `paper2beamer/core/compiler.py` — latexmk wrapper for PDF compilation
 - `paper2beamer/core/citations.py` — Citation detection and .bib generation
 - `paper2beamer/core/templates.py` — Beamer template ZIP validation/installation
 - `paper2beamer/cache/manager.py` — SHA-256 content-addressed filesystem cache
-- `paper2beamer/worker/tasks.py` — End-to-end processing pipeline
+- `paper2beamer/worker/tasks.py` — End-to-end processing pipeline with step_log tracking
 - `paper2beamer/config.py` — pydantic-settings configuration (env vars + .env)
 
 ### API (FastAPI)
