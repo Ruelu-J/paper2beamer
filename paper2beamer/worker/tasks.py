@@ -1,6 +1,7 @@
 """Background job processing pipeline — ties all core components together."""
 
 import datetime
+import json
 import uuid
 from pathlib import Path
 
@@ -60,24 +61,39 @@ async def process_job(
             extract_result = None
             if not bypass_cache:
                 await _update_job(session, job, JobStatus.EXTRACTING, 10)
+                await _append_step(session, job, "checking_cache",
+                                   "Checking extraction cache")
                 cached = await cache_mgr.get(session, pdf_hash)
                 if cached:
                     extract_result = cached
+                    await _append_step(session, job, "cache_hit",
+                                       "Using cached extraction result")
 
             if extract_result is None:
+                await _update_job(session, job, JobStatus.EXTRACTING, 15)
+                await _append_step(session, job, "cache_miss",
+                                   "Starting MinerU cloud extraction")
                 await _update_job(session, job, JobStatus.EXTRACTING, 20)
+                await _append_step(session, job, "extracting_uploading",
+                                   "Uploading PDF to MinerU")
                 extract_result = await extractor.extract(
                     pdf_path, output_dir / "extract"
                 )
+                await _append_step(session, job, "extracting_done",
+                                   f"Extracted {len(extract_result.markdown)} chars")
                 await cache_mgr.put(
                     session, pdf_hash, extract_result, Path(pdf_path).name
                 )
 
             # Step 2: Parse Markdown → Document
             await _update_job(session, job, JobStatus.CONVERTING, 40)
+            await _append_step(session, job, "parsing_markdown",
+                               "Parsing extracted markdown into structured document")
             document = parser.parse(
                 extract_result.markdown, extract_result.images_dir
             )
+            await _append_step(session, job, "parsing_done",
+                               f"Parsed {len(document.sections)} sections")
 
             # Step 3: Resolve template directory
             await _update_job(session, job, JobStatus.CONVERTING, 40)
@@ -97,11 +113,19 @@ async def process_job(
             from paper2beamer.core.llm_converter import LLMBeamerConverter
             llm_converter = LLMBeamerConverter()
             if llm_converter.enabled:
+                await _append_step(session, job, "converting_llm",
+                                   f"Generating Beamer via LLM ({llm_converter.model})")
                 beamer_tex = await llm_converter.convert(
                     document, Path(template_dir), output_mode
                 )
+                await _append_step(session, job, "converting_done",
+                                   f"LLM generated {len(beamer_tex)} chars")
             else:
+                await _append_step(session, job, "converting_programmatic",
+                                   "Converting document to Beamer LaTeX")
                 beamer_tex = converter.convert(document, template_dir, output_mode)
+                await _append_step(session, job, "converting_done",
+                                   f"Generated {len(beamer_tex)} chars")
 
             # Step 6: Split frames (skip for LLM output — already well-structured)
             if not llm_converter.enabled:
@@ -113,6 +137,8 @@ async def process_job(
             # and the regenerated frames are retried until it compiles or
             # the attempt budget is exhausted.
             await _update_job(session, job, JobStatus.COMPILING, 80)
+            await _append_step(session, job, "compiling_latex",
+                               f"Compiling with {settings.tex_engine}")
 
             async def _compile_once(tex: str) -> tuple[bytes, str]:
                 return await compiler.compile(
@@ -165,6 +191,8 @@ async def process_job(
 
             # Step 7: Package output ZIP
             await _update_job(session, job, JobStatus.COMPILING, 90)
+            await _append_step(session, job, "packaging_zip",
+                               "Creating output ZIP")
             tex_path = output_dir / "main.tex"
             pdf_path_out = output_dir / "presentation.pdf"
             zip_path = output_dir / "presentation.zip"
@@ -193,6 +221,8 @@ async def process_job(
             create_zip(zip_path, zip_files)
 
             # Complete
+            await _append_step(session, job, "done",
+                               f"Completed in {len(document.sections)} sections")
             job.status = JobStatus.COMPLETED
             job.progress_percent = 100
             job.output_zip_path = str(zip_path)
@@ -213,6 +243,25 @@ async def _update_job(session: AsyncSession, job: Job, status: JobStatus,
                       progress: int):
     job.status = status
     job.progress_percent = progress
+    await session.commit()
+
+
+async def _append_step(session: AsyncSession, job: Job, step: str,
+                       detail: str = ""):
+    """Append a step record to the job's step_log for UI progress display."""
+    import json
+    logs: list[dict] = []
+    if job.step_log:
+        try:
+            logs = json.loads(job.step_log)
+        except (json.JSONDecodeError, TypeError):
+            logs = []
+    logs.append({
+        "time": datetime.datetime.utcnow().strftime("%H:%M:%S"),
+        "step": step,
+        "detail": detail,
+    })
+    job.step_log = json.dumps(logs, ensure_ascii=False)
     await session.commit()
 
 

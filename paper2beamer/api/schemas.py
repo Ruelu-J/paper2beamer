@@ -18,6 +18,9 @@ class JobStatusResponse(BaseModel):
     pdf_hash: str | None = None
     progress_percent: int = 0
     error_message: str | None = None
+    step_log: str | None = None
+    output_tex_path: str | None = None
+    log_text: str | None = None
     created_at: datetime | None = None
     completed_at: datetime | None = None
 

@@ -36,6 +36,7 @@ class Job(Base):
     output_bib_path = Column(String(512), nullable=True)
     log_text = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
+    step_log = Column(Text, nullable=True)  # JSON list of {time, step, detail}
     progress_percent = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
