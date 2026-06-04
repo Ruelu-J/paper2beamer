@@ -45,6 +45,8 @@ class SettingsInfo(BaseModel):
     mineru_api_url: str
     mineru_api_key_set: bool
     tex_engine: str
+    llm_api_key_set: bool = False
+    llm_model: str = "gpt-4o"
 
 
 class SettingsUpdate(BaseModel):

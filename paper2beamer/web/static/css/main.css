@@ -8,143 +8,310 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
         Ubuntu, Cantarell, sans-serif;
     color: #333;
-    background: #f5f7fa;
+    background: #f0f2f5;
     line-height: 1.6;
     min-height: 100vh;
+}
+
+/* ---- Layout ---- */
+.app-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    width: 320px;
+    min-width: 320px;
+    background: #fff;
+    border-right: 1px solid #e0e0e0;
+    padding: 1.5rem;
     display: flex;
     flex-direction: column;
+    gap: 0;
+    overflow-y: auto;
+    max-height: 100vh;
+    position: sticky;
+    top: 0;
 }
 
-.navbar {
-    background: #1a1a2e;
-    color: white;
-    padding: 0.75rem 2rem;
+.main-content {
+    flex: 1;
+    padding: 2rem 3rem;
+    max-width: 900px;
+}
+
+/* ---- Sidebar ---- */
+.sidebar-header {
+    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #eee;
+}
+
+.brand {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #1a1a2e;
+    text-decoration: none;
+}
+
+.brand-tagline {
+    color: #888;
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+}
+
+.sidebar-section {
+    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.sidebar-section h3 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #888;
+    margin-bottom: 0.75rem;
+}
+
+.sidebar-footer {
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid #eee;
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    font-size: 0.8rem;
 }
 
-.navbar .brand {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: white;
-    text-decoration: none;
-}
-
-.nav-links a {
-    color: #ccc;
-    text-decoration: none;
-    margin-left: 1.5rem;
-    font-size: 0.95rem;
-}
-
-.nav-links a:hover {
-    color: white;
-}
-
-.container {
-    max-width: 800px;
-    margin: 2rem auto;
-    padding: 0 1rem;
-    flex: 1;
-}
-
-h1 {
-    font-size: 1.75rem;
-    margin-bottom: 0.5rem;
-    color: #1a1a2e;
-}
-
-h2 {
-    font-size: 1.25rem;
-    margin: 1.5rem 0 0.75rem;
-    color: #1a1a2e;
-}
-
+/* ---- Forms ---- */
 .form-group {
-    margin-bottom: 1.25rem;
+    margin-bottom: 0.75rem;
 }
 
 .form-group label {
     display: block;
     font-weight: 600;
-    margin-bottom: 0.35rem;
+    margin-bottom: 0.25rem;
+    font-size: 0.85rem;
+    color: #555;
 }
 
-.form-group input[type="file"],
-.form-group input[type="text"],
-.form-group input[type="password"],
-.form-group select {
+.input-sm {
     width: 100%;
-    padding: 0.6rem;
-    border: 1px solid #ccc;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid #d0d0d0;
     border-radius: 6px;
-    font-size: 1rem;
+    font-size: 0.9rem;
+    transition: border-color 0.15s;
+}
+
+.input-sm:focus {
+    outline: none;
+    border-color: #0066cc;
+    box-shadow: 0 0 0 3px rgba(0,102,204,0.1);
 }
 
 .form-group small {
     display: block;
-    color: #666;
-    margin-top: 0.25rem;
-    font-size: 0.85rem;
+    color: #999;
+    margin-top: 0.2rem;
+    font-size: 0.78rem;
 }
 
-.btn-primary {
+.form-group small a {
+    color: #0066cc;
+}
+
+.btn-save {
+    width: 100%;
+    padding: 0.55rem;
+    background: #333;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.15s;
+}
+.btn-save:hover { background: #555; }
+
+.save-status {
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+    min-height: 1.2rem;
+}
+
+/* ---- Mode Tabs ---- */
+.mode-tabs {
+    display: flex;
+    gap: 0;
+    border: 1px solid #d0d0d0;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.mode-tab {
+    flex: 1;
+    padding: 0.45rem 0;
+    border: none;
+    background: #f8f9fa;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #666;
+    transition: all 0.15s;
+}
+
+.mode-tab:first-child { border-right: 1px solid #d0d0d0; }
+
+.mode-tab.active {
+    background: #0066cc;
+    color: white;
+}
+
+.mode-tab:not(.active):hover {
+    background: #e9ecef;
+}
+
+/* ---- Upload Tpl Details ---- */
+.upload-tpl-details {
+    margin-top: 0.5rem;
+    font-size: 0.82rem;
+}
+
+.upload-tpl-details summary {
+    cursor: pointer;
+    color: #0066cc;
+    font-weight: 500;
+}
+
+/* ---- Main Content ---- */
+.main-header {
+    margin-bottom: 2rem;
+}
+
+.main-header h1 {
+    font-size: 1.75rem;
+    color: #1a1a2e;
+    margin-bottom: 0.25rem;
+}
+
+.main-header p {
+    color: #666;
+    font-size: 1rem;
+}
+
+/* ---- Upload Zone ---- */
+.upload-zone {
+    margin-bottom: 2rem;
+}
+
+.upload-drop-area {
+    border: 2px dashed #ccc;
+    border-radius: 12px;
+    padding: 2.5rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    background: #fafbfc;
+    position: relative;
+}
+
+.upload-drop-area:hover, .upload-drop-area.drag-over {
+    border-color: #0066cc;
+    background: #f0f7ff;
+}
+
+.upload-icon {
+    margin-bottom: 0.75rem;
+}
+
+.upload-text {
+    font-size: 1.05rem;
+    color: #555;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+.file-input {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.btn-convert {
+    padding: 0.75rem 2.5rem;
     background: #0066cc;
     color: white;
     border: none;
-    padding: 0.75rem 1.5rem;
-    font-size: 1rem;
-    border-radius: 6px;
+    border-radius: 8px;
+    font-size: 1.05rem;
     cursor: pointer;
     font-weight: 600;
+    transition: background 0.15s;
 }
 
-.btn-primary:hover {
-    background: #0052a3;
+.btn-convert:hover { background: #0052a3; }
+.btn-convert:disabled { background: #99c2e6; cursor: not-allowed; }
+
+/* ---- Spinner ---- */
+.spinner-icon {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #e0e0e0;
+    border-top: 3px solid #0066cc;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 0.5rem;
 }
 
-.result-area {
-    margin-top: 2rem;
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator { display: block; }
+.htmx-request.htmx-indicator { display: block; }
+
+/* ---- Info Box ---- */
 .info-box {
     background: white;
-    border: 1px solid #ddd;
+    border: 1px solid #e0e0e0;
     border-radius: 8px;
-    padding: 1.25rem;
+    padding: 1rem 1.25rem;
+    font-size: 0.9rem;
+    color: #666;
+    text-align: center;
 }
 
-.info-box ol {
-    margin-left: 1.25rem;
-    margin-top: 0.5rem;
-}
-
-.info-box li {
-    margin-bottom: 0.35rem;
-}
-
+/* ---- Job Card ---- */
 .job-card {
     background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 1.5rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
     margin-bottom: 1rem;
 }
 
-.job-card.completed {
-    border-left: 4px solid #28a745;
+.job-card h3 {
+    font-size: 1.05rem;
+    color: #1a1a2e;
+    margin-bottom: 0.5rem;
 }
 
-.job-card.failed {
-    border-left: 4px solid #dc3545;
+.job-meta {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.85rem;
+    color: #888;
+    margin-bottom: 0.75rem;
 }
 
 .progress-bar {
     width: 100%;
-    height: 8px;
+    height: 6px;
     background: #e0e0e0;
-    border-radius: 4px;
+    border-radius: 3px;
     overflow: hidden;
     margin: 0.75rem 0;
 }
@@ -152,85 +319,110 @@ h2 {
 .progress-fill {
     height: 100%;
     background: #0066cc;
-    transition: width 0.3s ease;
+    transition: width 0.5s ease;
+    border-radius: 3px;
 }
 
 .status-badge {
     display: inline-block;
-    padding: 0.2rem 0.6rem;
-    border-radius: 4px;
-    font-size: 0.85rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
     font-weight: 600;
 }
 
-.status-badge.completed {
-    background: #d4edda;
-    color: #155724;
-}
-
-.status-badge.failed {
-    background: #f8d7da;
-    color: #721c24;
-}
-
+.status-badge.completed { background: #d4edda; color: #155724; }
+.status-badge.failed { background: #f8d7da; color: #721c24; }
 .status-badge.pending,
 .status-badge.extracting,
 .status-badge.converting,
-.status-badge.compiling {
-    background: #cce5ff;
-    color: #004085;
-}
-
-.spinner {
-    text-align: center;
-    padding: 2rem;
-    color: #666;
-}
+.status-badge.compiling { background: #cce5ff; color: #004085; }
 
 .download-btn {
     display: inline-block;
     background: #28a745;
     color: white;
     text-decoration: none;
-    padding: 0.6rem 1.25rem;
+    padding: 0.55rem 1.25rem;
     border-radius: 6px;
     font-weight: 600;
-    margin-top: 0.75rem;
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
 }
-
-.download-btn:hover {
-    background: #218838;
-}
-
-code {
-    background: #f0f0f0;
-    padding: 0.15rem 0.4rem;
-    border-radius: 3px;
-    font-size: 0.9em;
-}
+.download-btn:hover { background: #218838; }
 
 .error-msg {
     background: #f8d7da;
     color: #721c24;
     padding: 0.75rem 1rem;
     border-radius: 6px;
-    margin-top: 0.75rem;
+    margin-top: 0.5rem;
     font-size: 0.9rem;
-    white-space: pre-wrap;
 }
 
 .success-msg {
     background: #d4edda;
     color: #155724;
-    padding: 0.75rem 1rem;
+    padding: 0.5rem 0.75rem;
     border-radius: 6px;
-    margin-top: 0.75rem;
+    font-size: 0.85rem;
+}
+
+/* ---- Job History ---- */
+.job-history {
+    margin-top: 2rem;
+}
+
+.job-history h2 {
+    font-size: 1.15rem;
+    color: #1a1a2e;
+    margin-bottom: 0.75rem;
+}
+
+.job-history-item {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     font-size: 0.9rem;
 }
 
-footer {
-    text-align: center;
-    padding: 1.5rem;
+.job-history-item .name {
+    font-weight: 500;
+    color: #333;
+}
+
+.job-history-item .time {
     color: #999;
-    font-size: 0.85rem;
+    font-size: 0.82rem;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 768px) {
+    .app-layout {
+        flex-direction: column;
+    }
+    .sidebar {
+        width: 100%;
+        min-width: auto;
+        max-height: none;
+        position: static;
+        border-right: none;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    .main-content {
+        padding: 1.5rem 1rem;
+    }
+}
+
+/* ---- Success/Error messages in sidebar ---- */
+.save-status .success-msg,
+.save-status .error-msg {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.78rem;
+    margin-top: 0.25rem;
 }

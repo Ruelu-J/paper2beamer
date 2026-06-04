@@ -1,0 +1,1369 @@
+\documentclass{beamer}
+
+\usepackage[BoldFont,SlantFont]{xeCJK}
+\setCJKmainfont[Path=fonts/]{STKAITI.TTF}
+\setCJKsansfont[Path=fonts/]{STKAITI.TTF}
+\setCJKmonofont[Path=fonts/]{STKAITI.TTF}
+\setmainfont{Times New Roman}
+\setsansfont{Times New Roman}
+\setmonofont{Times New Roman}
+
+\usepackage{fontenc}
+\usepackage{hyperref}
+
+% other packages
+\usepackage{latexsym,amsmath,xcolor,multicol,booktabs,calligra}
+\usepackage{graphicx,pstricks,listings,stackengine}
+
+\usepackage{bm}
+\usepackage{amssymb}
+\usepackage{multirow}
+\usefonttheme{serif}
+\setbeamertemplate{navigation symbols}{}
+
+\author{ZHENYU WANGa, PETER B\"UHLMANNc, ZIJIAN GUOb}
+\title{DISTRIBUTIONALLY ROBUST LEARNING FOR MULTI-SOURCE UNSUPERVISED DOMAIN ADAPTATION}
+\institute{ZHENYU WANGa, PETER B\"UHLMANNc, ZIJIAN GUOb}
+\date{\today}
+\usepackage{suda}
+
+% defs
+\def\cmd#1{\texttt{\color{red}\footnotesize $\backslash$#1}}
+\def\env#1{\texttt{\color{blue}\footnotesize #1}}
+\definecolor{deepblue}{rgb}{0,0,0.5}
+\definecolor{deepred}{rgb}{0.6,0,0}
+\definecolor{deepgreen}{rgb}{0,0.5,0}
+\definecolor{halfgray}{gray}{0.55}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    keywordstyle=\bfseries\color{deepblue},
+    emphstyle=\ttfamily\color{deepred},    % Custom highlighting style
+    stringstyle=\color{deepgreen},
+    numbers=left,
+    numberstyle=\small\color{halfgray},
+    rulesepcolor=\color{red!20!green!20!blue!20},
+    frame=shadowbox,
+}
+
+\setbeamertemplate{caption}[numbered]
+\renewcommand\figurename{图} 
+\renewcommand\tablename{表}
+
+\usepackage{perpage} %the perpage package
+\MakePerPage{footnote} %the perpage package command
+
+\newfontfamily\wingdingfamily[Path=fonts/]{wingding.ttf}
+\newcommand\headtoright{%
+  \texorpdfstring{{\wingdingfamily\XeTeXglyph190\relax}}{???}}
+
+\setbeamertemplate{itemize item}{\headtoright}
+\setbeamertemplate{itemize subitem}{$\bullet$}
+\setbeamertemplate{itemize subsubitem}{$\circ$}
+\setbeamertemplate{footline}{\hfill\insertframenumber/\inserttotalframenumber\hfill}
+\begin{document}
+\begin{frame}
+    \titlepage
+    \begin{figure}[htpb]
+        \begin{center}
+            \includegraphics[width=0.2\linewidth]{figs/suda_logo.pdf}
+        \end{center}
+    \end{figure}
+\end{frame}
+
+\begin{frame}
+    \tableofcontents[sectionstyle=show,subsectionstyle=show/shaded/hide,subsubsectionstyle=show/shaded/hide]
+\end{frame}
+
+\section{Introduction.}
+
+\begin{frame}{Introduction}
+    A fundamental assumption for the success of machine learning (ML) algorithms is that the training and test data sets share the same underlying distribution. However, when a domain shift occurs – that is, when the distribution of the test data differs from that of the training data – classical statistical learning algorithms often exhibit unreliable performance, even when they are carefully fine-tuned on the training data [43, 26, 29]. Developing methods that remain robust and achieve excellent prediction performance under domain shift is both critical and challenging.
+\end{frame}
+
+\begin{frame}{Introduction (Continued)}
+    Domain adaptation techniques have proven to be effective for improving generalization by transferring knowledge from one or multiple source domains to an unseen target domain [30, 16, 19, 48]. In contrast to traditional multi-source settings, where only data from multiple source domains are available, the multi-source unsupervised domain adaptation (MSDA) framework leverages not only multiple labeled source datasets but also unlabeled target data, as depicted in Figure 1. By incorporating the unlabeled target observations, MSDA may lead to better predictive models tailored for the target domain. This approach is particularly important in fields such as healthcare [50, 41] or finance [11], where the acquisition of target labels is often expensive or infeasible, and the target domain can differ substantially from any of the source domains. Meanwhile, compared to the semi-supervised setting, which considers more covariate data than outcome labels, this work focuses on the fully unsupervised setting for the target domain, where no target labels are available.
+\end{frame}
+
+\begin{frame}{Illustration of the MSDA Framework}
+    \begin{figure}[htpb]
+        \centering
+        \includegraphics[width=0.7\linewidth,height=0.6\textheight,keepaspectratio]{images/9cc707d69555a42f268609f4612621e374c18929915aaca9c94853f408271abb.jpg}
+        \caption{Illustration of the Multi-source Unsupervised Domain Adaptation (MSDA) framework, where source domains have labeled data and the target domain only has unlabeled data.}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Formal Setup}
+    We now introduce a formal setup of our focused MSDA regime. Suppose that there are independent datasets collected from L source domains. For each source $1 \leq l \leq L$ , the data $\{ X _ { i } ^ { ( \bar { l } ) } , Y _ { i } ^ { ( l ) } \} _ { 1 \leq i \leq n _ { l } }$ are assumed to be i.i.d. samples generated according to:
+    \begin{equation*}
+        X _ {i} ^ {(l)} \sim \mathbf {P} _ {X} ^ {(l)} \quad \text { and } \quad Y _ {i} ^ {(l)} = f ^ {(l)} (X _ {i} ^ {(l)}) + \varepsilon_ {i} ^ {(l)}, \tag {1.1}
+    \end{equation*}
+    where $X _ { i } ^ { ( l ) } \in \mathbb { R } ^ { p }$ and $Y _ { i } ^ { ( l ) } \in \mathbb { R }$ represent the covariates and outcome respectively, and $f ^ { ( l ) } ( x ) = \mathbb { E } [ Y _ { i } ^ { ( l ) } | X _ { i } ^ { ( l ) } = x ]$ stands for the conditional outcome model for the l-th source domain. Here, both the covariate distribution $\mathbf { P } _ { X } ^ { ( l ) }$ and the conditional outcome model $f ^ { ( l ) } ( \cdot )$ are allowed to vary by source l.
+\end{frame}
+
+\begin{frame}{Formal Setup (Continued)}
+    Meanwhile, we denote the target distribution by $\mathbf { Q } = ( \mathbf { Q } _ { X } , \mathbf { Q } _ { Y | X } )$ , which may differ from any of the source distributions in (1.1). Under the MSDA regime, although we have access to i.i.d. covariate observations $\{ X _ { j } ^ { \mathbf { Q } } \} _ { 1 \leq j \leq N }$ drawn from $\mathbf { Q } _ { X }$ , no corresponding outcome labels are available.
+\end{frame}
+
+\subsection{Our results and contribution.}
+
+\begin{frame}{Our results and contribution.}
+    Most existing unsupervised domain adaptation methods rely on the assumption that the conditional outcome distributions of the source and target domains are similar [30, 63, 71]. However, verifying this similarity is inherently challenging, especially when outcome labels are unavailable in the target domain. To overcome this limitation, we borrow ideas from the distributionally robust optimization (DRO) framework [38, 52, 4], and introduce a robust prediction model that ensures robust predictive performance even when the target domain’s conditional outcome distribution deviates from those of the source domains.
+\end{frame}
+
+\begin{frame}{Our results and contribution. (Continued)}
+    We define an uncertainty set comprising target populations whose conditional outcome distributions are generated as mixtures from those of source populations. The proposed robust prediction model is then formulated to optimize the worst-case reward (about the explained variance) evaluated over this uncertainty set. In practical scenarios, domain experts may possess prior knowledge about the target population or seek to ensure robustness within a specific region around the observed mixture of source distributions. We incorporate such prior information into constructing the uncertainty set, which may improve the prediction accuracy of our proposed robust prediction model [23, 54].
+\end{frame}
+
+\begin{frame}{Our results and contribution. (Continued)}
+    Our primary contribution, stated in Theorem 2.1, demonstrates that our distributionally robust model, defined via a minimax optimization, can be identified (in the population sense) as a weighted average of the individual source models $\{ f ^ { ( l ) } \} _ { 1 \le l \le L }$ in (1.1). The optimal aggregation weights are determined by solving a convex quadratic program, thereby simplifying the original minimax formulation and enabling easy implementation using standard quadratic programming solvers. Moreover, we introduce a novel bias correction step to obtain more accurate aggregation weights. We refer to our entire methodology as Distributionally Robust Learning (DRoL), which first fits individual source conditional mean models using any ML method of the user’s choice, and then aggregates these models into a robust prediction model specifically tailored for the target domain.
+\end{frame}
+
+\begin{frame}{Our results and contribution. (Continued)}
+    We leverage the weighted average formulation to establish the convergence rates of our proposed DRoL method in terms of both the objective function and the model parameters. We further demonstrate that the bias correction step improves these rates for certain regimes. As special but essential examples, we show that the estimation error for the model parameters achieves $n ^ { - 1 / 2 }$ in low-dimensional linear regression and $\sqrt { s \log p / n }$ in the high-dimensional setting, with s denoting the maximum sparsity level in the source domains.
+\end{frame}
+
+\begin{frame}{Our results and contribution. (Continued)}
+    As another contribution, we explore and establish identification results for distributionally robust models that use alternative loss functions, including standard squared error and regret loss [1]. Our analysis reveals that the choice of loss function is pivotal for the constructed robust models in the MSDA setting. Specifically, while models employing squared error loss are similarly expressed as weighted averages analogous to DRoL, their aggregation weights are sensitive to heterogeneous noise levels across source domains. Regret-based models effectively mitigate the impact of heterogeneous noise, yet become NP-hard to solve when general prior information about the target domain is incorporated. In contrast, our proposed robust model not only alleviates the impact of heterogeneous noise levels but also effectively accommodates the general prior information; see the detailed discussions in Section 2.3.
+\end{frame}
+
+\begin{frame}{Summary of Main Contributions}
+    In summary, the main contributions of this paper are as follows.
+    \begin{itemize}
+        \item For the MSDA setting, we introduce a theoretically justified framework for constructing distributionally robust models, where the identification result in Theorem 2.1 reduces the minimax optimization to a standard quadratic program.
+        \item We explore various losses when constructing distributionally robust models, and demonstrate the unique advantages offered by the proposed reward function.
+        \item We propose a bias-correction method to more accurately estimate the optimal aggregation weights, which are then used to construct the distributionally robust model. This method is compatible with various ML algorithms and achieves a faster convergence rate compared to direct plug-in approaches.
+    \end{itemize}
+\end{frame}
+
+\subsection{Related works. This section further discusses the connections and differences between our proposal and the existing literature.}
+
+\begin{frame}{Related works.}
+    Unsupervised Domain Adaptation. Inspired by the foundational work of [3], most unsupervised domain adaptation methods aim to align the distributions between source and target domains by minimizing a specific distance metric [22, 28, 44]. Another prominent approach employs adversarial training techniques to map source and target domains into a shared representation space, ensuring that a discriminator cannot distinguish between them [19, 59, 48]. These existing methods implicitly assume that the conditional outcome distributions given the covariates, or their learned representations, are similar across both source and target domains, which is particularly challenging to verify without labeled target data. In contrast, without requiring such a similarity condition, our work leverages the idea of DRO to develop a robust prediction model that maintains good performance as long as the target distribution resides within a predefined uncertainty set.
+\end{frame}
+
+\begin{frame}{Related works. (Continued)}
+    Group DRO and agnostic federated learning. Existing approaches in Group DRO [47, 23, 68] and agnostic federated learning [37, 14] primarily aim to construct generalizable prediction models using data from source domains without using information from the target domain. In contrast, as shown in Figure 1, our work focuses on the MSDA setting, where, in addition to data from multiple sources, observations of target covariates are also available. We leverage this extra information to design the distributionally robust model tailored for this target domain. This difference in settings leads to distinct definitions of the uncertainty class and algorithmic designs, as detailed in Sections 2.1 and 3.4. Moreover, whereas Group DRO works typically focus on classification applications, our approach is specially designed for the regression task.
+\end{frame}
+
+\begin{frame}{Related works. (Continued)}
+    Minimax Regret Optimization. Minimax regret models have been explored in various contexts to address noise sensitivity in distributional shifts. In single-source settings, [1] introduced a minimax regret framework to mitigate the impact of noise levels across source and target distributions. Recent extensions include multi-source linear regression [36] and conditional average treatment effect estimation in causal inference [70]. However, these works restrict the constraint set to simplexes or polyhedrons, ensuring computational tractability. In Section 2.3, we show that such regret-based approaches become NP-hard for general convex constraints in the MSDA setting, limiting their ability to incorporate flexible prior information about the target distribution. In contrast, our proposed reward-based models not only mitigate the impact of heterogeneous noise levels across source domains, but also integrate the prior in a computationally efficient manner; see Section 2.3 for the detailed discussions.
+\end{frame}
+
+\begin{frame}{Related works. (Continued)}
+    Maximin Effect. Previous works [32, 8, 46, 21] studied the estimation and inference for the maximin effect, a particular type of robust prediction model using linear models. This paper extends the concept of the maximin effect to encompass ML algorithms, moving beyond the linear models. Moreover, our DRoL approach is designed to incorporate prior knowledge about the target distribution, resulting in a less conservative model.
+\end{frame}
+
+\subsection{Notations.}
+
+\begin{frame}{Notations.}
+    For a positive integer m, define $[ m ] = \{ 1 , . . . , m \}$ . For real numbers a and $b ,$ define $a \vee b = \operatorname* { m a x } \{ a , b \}$ and $a \wedge b = \operatorname* { m i n } \{ a , b \}$ . We use c and $C$ to denote generic positive constants that may vary from place to place. For positive sequences $a ( n )$ and $b ( n )$ , we use $a ( n ) \lesssim b ( n )$ to represent that there exists some universal constant $C > 0$ such that $a ( n ) \leq C \cdot b ( n )$ for all $n \geq 1$ , and denote $a ( n ) \asymp b ( n )$ if $a ( n ) \lesssim b ( n )$ and $b ( n ) \lesssim a ( n )$ . We use notations $a ( n ) \ll b ( n )$ if lim su $\operatorname { p } _ { n \to \infty } ( a ( n ) / b ( n ) ) = 0$ .
+\end{frame}
+
+\begin{frame}{Notations. (Continued)}
+    For a vector $x \in \mathbb { R } ^ { p }$ , we define its $\ell _ { q }$ norm as $\| \boldsymbol { x } \| _ { q } = ( \sum _ { i = 1 } ^ { p } | x _ { i } | ^ { q } ) ^ { 1 / q }$ for $q \geq 0$ . For a numeric value a, we use notation $a _ { p }$ to represent a length $p$ vector whose every entry is a. For a matrix A, we use $\| A \| _ { F } , \| A \| _ { 2 } ^ { * }$ and $\| A \| _ { \infty }$ to denote its Frobenius norm, spectral norm, and element-wise maximum norm, respectively. We use $I _ { p }$ to denote the p-dimensional identity matrix. Let $n _ { l }$ and $N$ represent the sample size for the l-th source domain and the target domain, respectively.
+\end{frame}
+
+\section{Distributionally Robust Prediction Models: Definition and Identification.}
+
+\begin{frame}{Distributionally Robust Prediction Models: Definition and Identification.}
+    We consider the multi-source unsupervised domain adaptation (MSDA) setting, where we have labeled samples from L source domains and only unlabeled data from the target domain. For each source domain $l \in [ L ]$ , let $\{ X _ { i } ^ { ( l ) } , Y _ { i } ^ { ( l ) } \} _ { i \in [ n _ { l } ] }$ be i.i.d. samples drawn from the distribution $\mathbf { P } ^ { ( l ) } = ( \mathbf { P } _ { X } ^ { ( l ) } , \mathbf { P } _ { Y | X } ^ { ( l ) } )$ . For the target domain, characterized by $\mathbf { Q } = ( \mathbf { Q } _ { X } , \mathbf { Q } _ { Y | X } )$ , we observe only unlabeled covariate samples $\{ X _ { j } ^ { \mathbf { Q } } \} _ { j \in [ N ] }$ . Our goal is to build a prediction model that robustly generalizes to the target domain, accommodating both covariate shift (where $\mathbf { Q } _ { X }$ may differ from any $\mathbf { P } _ { X } ^ { ( l ) }$) and posterior drift (where both $\mathbf { Q } _ { X }$ and $\mathbf { Q } _ { Y \mid X }$ may differ from any $\mathbf { P } _ { X } ^ { ( l ) }$ and $\mathbf { P } _ { Y | X } ^ { ( l ) }$).
+\end{frame}
+
+\subsection{Group Distributionally Robust Prediction Models.}
+
+\begin{frame}{Group Distributionally Robust Prediction Models.}
+    In the absence of the labeled samples from the target domain, identifying its conditional outcome distribution $\mathbf { Q } _ { Y \mid X }$ becomes particularly challenging, especially when we allow $\mathbf { Q } _ { Y \mid X }$ to be different from the source domain’s conditional outcome distributions. Instead of aiming at recovering $\mathbf { Q } _ { Y \mid X }$ , we propose a distributionally robust prediction model that ensures reliable predictive performance across a range of distributions, potentially encompassing the target $\mathbf { Q }$ .
+\end{frame}
+
+\begin{frame}{Group Distributionally Robust Prediction Models. (Continued)}
+    In contrast to the unidentifiable $\mathbf { Q } _ { Y \mid X }$ , the target covariate distribution $\mathbf { Q } _ { X }$ is empirically accessible via the available target covariate samples $\{ X _ { j } ^ { \mathbf { Q } } \} _ { j \in [ N ] }$ . Based on $\mathbf { Q } _ { X }$ , we define the uncertainty class of distributions as
+    \begin{equation*}
+        \mathcal {C} (\mathbf {Q} _ {X}) := \left\{\mathbf {T} = (\mathbf {Q} _ {X}, \mathbf {T} _ {Y | X})   \big |   \mathbf {T} _ {Y | X} = \sum_ {l = 1} ^ {L} q _ {l} \cdot \mathbf {P} _ {Y | X} ^ {(l)} \quad \text { with } \quad q \in \Delta^ {L} \right\}, \tag {2.1}
+    \end{equation*}
+\end{frame}
+\begin{frame}{Uncertainty Set and Robust Prediction Model}
+    \begin{itemize}
+        \item Define the uncertainty set for the target conditional distribution $Y|X$:
+        \[
+        \mathcal{C}(\mathbf{Q}_X) := \left\{\mathbf{T} = (\mathbf{Q}_X, \mathbf{T}_{Y|X}) \mid \mathbf{T}_{Y|X} = \sum_{l=1}^{L} q_l \cdot \mathbf{P}_{Y|X}^{(l)} \quad \text{with} \quad q \in \Delta^{L} \right\},
+        \]
+        where $\Delta^{L} = \{ q \in \mathbb{R}^{L} | \sum_{l=1}^{L} q_l = 1, \min\{ q_l \geq 0 \} \}$ denotes the $(L-1)$-dimensional simplex.
+        \item Notably, if the true target conditional distribution $\mathbf{Q}_{Y \mid X}$ is indeed a mixture of $\{ \mathbf{P}_{Y|X}^{(l)} \}_{l \in [L]}$ then this uncertainty set $\mathcal{C}( \mathbf{Q}_{X} )$ contains the actual target population Q.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Comparison with Group DRO}
+    \begin{itemize}
+        \item Unlike previous Group DRO works [47, 23, 68], which are designed for the regime without target covariate information and thus define uncertainty sets over the joint distribution of $(X, Y)$, our proposed uncertainty set is tailored to the target domain by fixing $\mathbf{Q}_X$ and focusing solely on the conditional distribution $Y | X$.
+        \item In the no covariate shift scenario, the uncertainty sets defined by Group DRO and our approach coincide.
+        \item However, in the presence of covariate shift, we utilize the available target covariate samples in the MSDA regime and focus solely on variations in the conditional distribution $Y | X$.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Reward Function}
+    \begin{itemize}
+        \item Next, we introduce the reward function or the negative loss function, which serves as the basis for defining our distributionally robust prediction model.
+        \item We will discuss the benefits of using our particular reward function over alternative loss functions in Section 2.3.
+        \item Given a distribution T and a prediction model $f(\cdot)$, the reward function $\mathbf{R}_{\mathbf{T}}(f)$ is defined as
+        \[
+        \mathbf{R}_{\mathbf{T}}(f) := \mathbb{E}_{(X, Y) \sim \mathbf{T}} [ Y^{2} - (Y - f(X))^{2} ], 
+        \]
+        where $\mathbb{E}_{(X, Y) \sim \mathbf{T}}$ denotes the expectation taken with respect to the data $(X, Y)$ following the distribution T.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Interpretation of the Reward Function}
+    \begin{itemize}
+        \item The reward function $\mathbf{R}_{\mathbf{T}}(f)$ evaluates the predictive performance of the model $f(\cdot)$ relative to the null model, evaluated on the distribution T.
+        \item For the centered outcome variable $(\mathrm{i.e., \mathbb{E}_{\mathbf{T}}}[Y] = 0)$, $\mathbf{R}_{\mathbf{T}}(f)$ corresponds to the variance of the outcome explained by the model $f(\cdot)$.
+        \item Therefore, a larger value of $\mathbf{R}_{\mathbf{T}}(f)$ indicates better prediction performance of the model $f(\cdot)$.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Robust Prediction Model}
+    \begin{itemize}
+        \item Building upon the uncertainty set $\mathcal{C}(\mathbf{Q}_X)$, we consider the worst-case reward of a prediction model $f$ over this set, i.e. $\min_{\mathbf{T} \in \mathcal{C}(\mathbf{Q}_X)} \mathbf{R}_{\mathbf{T}}(f)$.
+        \item We then introduce the robust prediction model $f^{*}$ to maximize this worst-case reward, defined as
+        \[
+        f^{*} := \underset{f \in \mathcal{F}}{\arg \max} \underset{\mathbf{T} \in \mathcal{C}(\mathbf{Q}_{X})}{\min} \mathbf{R}_{\mathbf{T}}(f), 
+        \]
+        where $\mathcal{F}$ denotes a pre-specified function class.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Minimax Formulation}
+    \begin{itemize}
+        \item Using the loss function terminology, we rewrite (2.3) into an equivalent minimax optimization as follows:
+        \[
+        f^{*} := \underset{f \in \mathcal{F}}{\arg \min} \underset{\mathbf{T} \in \mathcal{C}(\mathbf{Q}_{X})}{\max} \mathbb{E}_{\mathbf{T}}[ \ell(X, Y; f) ] \quad \text{with} \quad \ell(x, y; f) = (y - f(x))^{2} - y^{2}.
+        \]
+        \item Since $f^{*}$ optimizes the worst-case reward over the entire convex hull of $\{ \mathbf{P}_{Y|X}^{(l)} \}_{l \in [L]}$, this can be conservative.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Incorporating Prior Knowledge}
+    \begin{itemize}
+        \item A common strategy to mitigate this conservatism is to incorporate prior knowledge about the target distribution, thereby refining the uncertainty set [23, 37, 68, 54].
+        \item For instance, prior expertise suggests that the target's $\mathbf{Q}_{Y \mid X}$ is a mixture of the sources' $\{ \mathbf{P}_{Y|X}^{(l)} \}_{l \in [L]}$ with mixture weights close to a pre-specified weight vector $q^{\mathrm{prior}} \in \Delta^{L}$.
+        \item In this case, we can restrict the target mixture weights to lie within the refined region $\mathcal{H} = \{ q \in \Delta^{L} \mid \| q - q^{\mathrm{prior}} \lVert_{2} \leq \rho \}$, where $\rho > 0$ is a user-specified parameter controlling the size of $\mathcal{H}$.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Refined Uncertainty Set}
+    \begin{itemize}
+        \item Let $\mathcal{H} \subseteq \Delta^{L}$ represent the prior knowledge regarding the sourcing mixture for the target domain.
+        \item We define the refined uncertainty set as
+        \[
+        \mathcal{C}(\mathbf{Q}_{X}, \mathcal{H}) := \left\{\mathbf{T} = (\mathbf{Q}_{X}, \mathbf{T}_{Y | X})   |   \mathbf{T}_{Y | X} = \sum_{l = 1}^{L} q_{l} \cdot \mathbf{P}_{Y | X}^{(l)} \quad \text{ with } \quad q \in \mathcal{H} \right\}. 
+        \]
+        \item This uncertainty set $\mathcal{C}(\mathbf{Q}_{X}, \mathcal{H})$ is a subset of $\mathcal{C}(\mathbf{Q}_{X})$ defined in (2.1), thereby narrowing the range of plausible distributions by leveraging the prior information encapsulated in $\mathcal{H}$.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Refined Robust Prediction Model}
+    \begin{itemize}
+        \item With the refined $\mathcal{C}(\mathbf{Q}_{X}, \mathcal{H})$, we define the corresponding robust prediction model $f_{\mathcal{H}}^{*}$ as:
+        \[
+        f_{\mathcal{H}}^{*} := \underset{f \in \mathcal{F}}{\arg \max} \underset{\mathbf{T} \in \mathcal{C}(\mathbf{Q}_{x}, \mathcal{H})}{\min} \mathbf{R}_{\mathbf{T}}(f). 
+        \]
+        \item The specification of $\mathcal{C}(\mathbf{Q}_{X}, \mathcal{H})$ involves balancing predictiveness against the robustness of $f_{\mathcal{H}}^{*}$.
+        \item If $\mathcal{C}(\mathbf{Q}_{X}, \mathcal{H})$ contains the target distribution Q, this smaller uncertainty set facilitates a more accurate prediction model.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Balancing Predictiveness and Robustness}
+    \begin{itemize}
+        \item In contrast, a larger uncertainty set $\mathcal{C}(\mathbf{Q}_{X})$, which does not incorporate prior knowledge $\mathcal{H}$, is more likely to contain Q and thus produce a more robust but potentially conservative prediction model.
+        \item We recommend specifying a reasonable $\mathcal{H}$ based on domain expertise, with $\mathcal{H} = \Delta^{L}$ serving as a default where prior knowledge is limited.
+        \item We have explored how different specifications of $\mathcal{H}$ affect the model predictiveness and robustness in the numerical studies in Sections 5.2 and 6.
+        \item We demonstrate in Sections 5.2 and 6 that integrating such prior information can significantly mitigate the conservativeness and improve the prediction accuracy of the robust prediction model.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Connection with Minimax Fairness}
+    \begin{itemize}
+        \item We conclude this subsection with a remark on the connection with minimax fairness.
+        \item In scenarios without covariate shift (i.e. $\mathbf{Q}_{X} = \mathbf{P}_{X}^{(l)}$ for all l), our robust model (2.3) aligns with the minimax fairness framework [31, 15]; see the details in Section A.2 of Supplements [62].
+        \item In the covariate shift setting, our proposal serves as a distributionally robust model in the MSDA regime, but it remains unclear whether it can be directly related to minimax fairness.
+    \end{itemize}
+\end{frame}
+
+\subsection{Identification for Distributionally Robust Prediction Models.}
+\begin{frame}{2.2. Identification for Distributionally Robust Prediction Models.}
+    \begin{itemize}
+        \item In this subsection, we establish that $f_{\mathcal{H}}^{*}$, initially formulated via a minimax optimization problem in (2.5), shall be explicitly characterized as a weighted average of individual source models $\{ f^{(l)} \}_{l \in [L]}$.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{THEOREM 2.1}
+    \begin{block}{THEOREM 2.1}
+        Suppose that the function class $\mathcal{F}$ is convex with $f^{(l)} \in \mathcal{F}$ for all $l \in [L]$ and $\mathcal{H}$ is a convex subset of $\Delta^{L}$, then $f_{\mathcal{H}}^{*}$ defined in (2.5) is identified as:
+        \[
+        f_{\mathcal{H}}^{*} = \sum_{l = 1}^{L} q_{l}^{*} \cdot f^{(l)} \quad \text{ with } \quad q^{*} = \underset{q \in \mathcal{H}}{\arg \min} q^{\intercal} \Gamma q, 
+        \]
+        where $\Gamma_{k, l} = \mathbb{E}_{\mathbf{Q}_{X}}[ f^{(k)}(X) f^{(l)}(X) ]$ for $k, l \in [L]$.
+    \end{block}
+\end{frame}
+
+\begin{frame}{Implications of Theorem 2.1}
+    \begin{itemize}
+        \item This theorem provides a population-level identification result, demonstrating that $f_{\mathcal{H}}^{*}$ is identified as a weighted aggregation of the true source models $\{ f^{(l)} \}_{l \in [L]}$.
+        \item It motivates our proposed data-dependent algorithm in Section 3.4: we apply the existing ML algorithms to estimate these individual source models $\{ f^{(l)} \}_{l \in [L]}$ and then compute the optimal aggregation weights by solving the data-dependent version of the quadratic program in (2.6).
+        \item We finally estimate $f_{\mathcal{H}}^{*}$ using estimated source models and optimal aggregation weights; see Algorithm 1 in Section 3.4 for details.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Geometric Interpretation}
+    \begin{itemize}
+        \item Next, we provide a geometric interpretation of the result established in Theorem 2.1.
+        \item The quadratic objective $q^{\intercal} \Gamma q$ in (2.6) is equivalent to $\mathbb{E}_{X \sim \mathbf{Q}_{X}}[ (\sum_{l=1}^{L} q_l f^{(l)}(X) )^{2} ]$, representing the distance from the aggregated model $\sum_{l=1}^{L} q_l f^{(l)}$ to the origin.
+        \item Geometrically, $f^{*}$ corresponds to the point within the convex hull of $\{ f^{(l)} \}_{l \in [L]}$ that is closest to the origin, minimizing the second-order moment, whereas $f_{\mathcal{H}}^{*}$ denotes the point closest to the origin within the $\mathcal{H}$-constrained set, as shown in the left panel of Figure 2.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Figure 2: Geometric Interpretation}
+    \begin{figure}[htpb]
+        \begin{center}
+            \includegraphics[width=0.7\linewidth]{images/eb31d268de38ccb3063258af31edc9bca8576ccdb12b53ef0f3fa86f69c206c0.jpg}
+        \end{center}
+        \caption{$f^{*}$ (red point) and $f_{\mathcal{H}}^{*}$ (blue point) for $p = 2, L = 5$, and additive models. The left panel: $f^{*}$ is the point closest to the origin in the convex hull of $\{ f^{(l)} \}_{l \in [L]}$, and $f_{\mathcal{H}}^{*}$ is the point in the $\mathcal{H}$-constrained set having the smallest distance to the origin; The right panel: consider the setting with shared first component $f_{1}^{(1)} = f_{1}^{(2)} = \ldots = f_{1}^{(L)} = f_{1}$ and the second component $f_{2}^{(l)}$ being scattered around 0; the distributional robust prediction model $f^{*}(x) = f_{1}(x_{1})$ (blue point) retains only the shared component and shrinks the sign heterogeneous component to zero.}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Capturing Shared Associations}
+    \begin{itemize}
+        \item Moreover, the robust prediction model $f_{\mathcal{H}}^{*}$ tends to capture shared associations across source domains while eliminating heterogeneous effects.
+        \item To illustrate this, consider additive models with $p = 2$ for simplicity. For each source $l$, suppose the individual source model is $f^{(l)}(x) = f_{1}^{(l)}(x_{1}) + f_{2}^{(l)}(x_{2})$, where the first component $f_{1}^{(l)}(x_{1}) = f_{1}(x_{1})$ is shared across all source domains, but the second component $f_{2}^{(l)}(x_{2})$ varies with $l$ and is randomly scattered around 0.
+        \item In this scenario, our proposed robust model $f^{*}(x) = f_{1}(x_{1})$ effectively captures the shared component across source domains while removing the heterogeneous effect, as depicted in the right panel of Figure 2.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Generalization of Previous Results}
+    \begin{itemize}
+        \item We numerically demonstrate this property in the case of high-dimensional sparse linear models in Section B.2 of Supplements [62].
+        \item This finding generalizes results from previous studies [32, 21], which primarily focused on linear models.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Comparison with Group DRO Identification}
+    \begin{itemize}
+        \item We now highlight the distinctions between our identification strategy and those employed in Group DRO works [47, 23].
+        \item Group DRO methods directly tackle the minimax problem $\min_{f \in \mathcal{F}} \max_{1 \leq l \leq L} \mathbb{E}_{\mathbf{P}^{(l)}}[ \ell\left(X, Y; f \right) ]$ by alternately solving the inner maximization and the outer minimization via neural networks.
+        \item This procedure is feasible because each source domain provides paired data $(X, Y)$ drawn from $\mathbf{P}^{(l)} = (\mathbf{P}_{X}^{(l)}, \mathbf{P}_{Y \mid X}^{(l)})$.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Challenge in MSDA Setting}
+    \begin{itemize}
+        \item In contrast, under the MSDA setting, directly applying such a strategy to solve the proposed minimax problem
+        \[
+        \min_{f \in \mathcal{F}} \max_{\mathbf{T} \in \mathcal{C}(\mathbf{Q}_{X})} \mathbb{E}_{\mathbf{T}}[ \ell(X, Y; f) ] = \min_{f \in \mathcal{F}} \max_{1 \leq l \leq L} \mathbb{E}_{(\mathbf{Q}_{X}, \mathbf{P}_{Y | X}^{(l)})}[ \ell(X, Y; f) ],
+        \]
+        is not straightforward because we only have access to unlabeled target covariate data to characterize $\mathbf{Q}_X$.
+    \end{itemize}
+\end{frame}
+\subsection{Exploration of Various Loss Functions for Distributionally Robust Models.}
+
+\begin{frame}{2.3. Exploration of Various Loss Functions for Distributionally Robust Models.}
+    \begin{itemize}
+        \item The choice of the loss function is crucial for constructing distributionally robust models in the MSDA setting.
+        \item We establish identification results for robust models that use different loss functions, including the standard squared error and regret loss \cite{1}.
+        \item We discuss the advantages of using the reward function that we have mainly adopted in the present paper.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Squared Error Loss}
+    We start with the squared error loss, which leads to the following robust prediction model:
+    \begin{equation*}
+        f _ {\mathcal {H}} ^ {\mathrm{sq}} = \min _ {f \in \mathcal {F}} \max _ {\mathbf {T} \in \mathcal {C} (\mathbf {Q} _ {X}, \mathcal {H})} \mathbb {E} _ {(X, Y) \sim \mathbf {T}} [ (Y - f (X)) ^ {2} ], \tag {2.7}
+    \end{equation*}
+    where $\mathcal { F }$ denotes a pre-specified function class, and $\mathcal { H } \subseteq \Delta ^ { L }$ encodes the prior information about the sourcing mixture in the target domain.
+\end{frame}
+
+\begin{frame}{Noise Levels and Proposition 2.1}
+    For each source domain, we define the noise level as $[ \sigma ^ { ( l ) } ] ^ { 2 } = \mathbb { E } [ ( \varepsilon _ { i } ^ { ( l ) } ) ^ { 2 } | X _ { i } ^ { ( l ) } ]$ with $\varepsilon _ { i } ^ { ( l ) } = Y _ { i } ^ { ( l ) } - f ^ { ( l ) } ( X _ { i } ^ { ( l ) } )$ . We further define the vector $\pmb { \sigma } ^ { 2 } = \big ( ( \bar { \sigma } ^ { ( 1 ) } ) ^ { 2 } , . . . , ( \bar { \sigma } ^ { ( \bar { L } ) } ) ^ { 2 } \big ) ^ { \intercal }$ .
+
+    \begin{block}{PROPOSITION 2.1}
+        Suppose that the function class $\mathcal { F }$ is convex with $f ^ { ( l ) } \in \mathcal { F }$ for all $l \in [ L ]$ and H is a convex subset of $\Delta ^ { L }$ , then $f _ { \mathcal { H } } ^ { \mathrm { s q } }$ defined in (2.7) is identified as:
+        \begin{equation*}
+            f _ {\mathcal {H}} ^ {\mathrm{sq}} = \sum_ {l = 1} ^ {L} q _ {l} ^ {\mathrm{sq}} \cdot f ^ {(l)} \quad \text { with } \quad q ^ {\mathrm{sq}} = \underset {q \in \mathcal {H}} {\arg \min} \left\{q ^ {\intercal} \Gamma q - q ^ {\intercal} (\gamma + \boldsymbol {\sigma} ^ {2}) \right\}, \tag {2.8}
+        \end{equation*}
+        where $\Gamma _ { k , l } = \mathbb { E } _ { \mathbf { Q } _ { x } } \mathbb { E } [ f ^ { ( k ) } ( X ) f ^ { ( l ) } ( X ) ]$ for $k , l \in [ L ]$ , and $\gamma _ { l } = \Gamma _ { l , l }$ for $l \in [ L ]$.
+    \end{block}
+\end{frame}
+
+\begin{frame}{Implications and Corollary 2.1}
+    \begin{itemize}
+        \item This proposition indicates that $f _ { \mathcal { H } } ^ { \mathrm { s q } }$ is also characterized by aggregating the source models $\{ f ^ { ( l ) } \} _ { l \in [ L ] }$.
+        \item The key distinction from the identification Theorem 2.1 is that the noise levels $\sigma ^ { 2 }$ across different source domains affect the aggregation weights of $f _ { \mathcal { H } } ^ { \mathrm { s q } }$.
+        \item We demonstrate the disadvantage of such aggregation in the following corollary by considering a simpler regime with $L = 2$ and $\mathcal { H } = \Delta ^ { \bar { 2 } }$.
+    \end{itemize}
+
+    \begin{block}{COROLLARY 2.1}
+        Suppose $L = 2$ , and $\mathcal { H } = \Delta ^ { 2 }$ . Then $f ^ { \mathrm { s q } }$ defined in (2.7) is identified as:
+        \begin{equation*}
+            f ^ {\mathrm{sq}} = q _ {1} f ^ {(1)} + (1 - q _ {1}) f ^ {(2)} \quad \mathrm{with} \quad q _ {1} = 0 \lor \left(\frac {1}{2} + \frac {\sigma_ {1} ^ {2} - \sigma_ {2} ^ {2}}{\mathbb {E} _ {\mathbf {Q}} [ (f ^ {(1)} (X) - f ^ {(2)} (X)) ^ {2} ]}\right) \land 1.
+        \end{equation*}
+        Consequently, when $\sigma _ { 1 } ^ { 2 } \gg \sigma _ { 2 } ^ { 2 } , f ^ { \mathrm { s q } } = f ^ { ( 1 ) } ;$ when $\sigma _ { 1 } ^ { 2 } = \sigma _ { 2 } ^ { 2 } , f ^ { \mathrm { s q } } = \frac { 1 } { 2 } f ^ { ( 1 ) } + \frac { 1 } { 2 } f ^ { ( 2 ) }$.
+    \end{block}
+\end{frame}
+
+\begin{frame}{Regret Loss}
+    The above corollary shows that $f ^ { \mathrm { s q } }$ prioritizes the group with the higher noise level, especially when one group exhibits a dominant noise over the other. When both groups have the same noise level, then $f ^ { \mathrm { s q } }$ becomes a simple average.
+
+    We now introduce the distributionally robust model based on the regret function in the MSDA setting, where the following regret function has been introduced in the work \cite{1}
+    \begin{equation*}
+        \operatorname{Regret} _ {\mathbf {T}} (f) = \mathbb {E} _ {\mathbf {T}} [ Y - f (X) ] ^ {2} - \inf _ {f ^ {\prime} \in \mathcal {F}} \mathbb {E} _ {\mathbf {T}} [ Y - f ^ {\prime} (X) ] ^ {2}.
+    \end{equation*}
+    The regret $\operatorname { R e g r e t } _ { \mathbf { T } } ( f )$ measures the excess risk of the model $f$ compared to the optimal model for the distribution T.
+\end{frame}
+
+\begin{frame}{Regret-Based Robust Model and Proposition 2.2}
+    Given the set $\mathcal { H } \subseteq \Delta ^ { L }$ and the function class ${ \mathcal { F } }$, we define
+    \begin{equation*}
+        f _ {\mathcal {H}} ^ {\text { reg }} := \underset {f \in \mathcal {F}} {\arg \min} \underset {\mathbf {T} \in \mathcal {C} (\mathbf {Q} _ {x}, \mathcal {H})} {\max} \text { Regret } _ {\mathbf {T}} (f). \tag {2.9}
+    \end{equation*}
+
+    \begin{block}{PROPOSITION 2.2}
+        Suppose that the function class $\mathcal { F }$ is convex with $f ^ { ( l ) } \in \mathcal { F }$ for all $l \in [ L ]$ , and $\mathcal { H }$ is a convex subset of $\Delta ^ { L }$ . Then $f _ { \mathcal { H } } ^ { \mathrm { r e g } }$ is equivalent to:
+        \begin{equation*}
+            f _ {\mathcal {H}} ^ {\text { reg }} = \underset {f \in \mathcal {F}} {\arg \min} \left\{r: \max _ {q \in \mathcal {H}} \mathbb {E} _ {\mathbf {Q} _ {X}} \left[ \left(\sum_ {l = 1} ^ {L} q _ {l} f ^ {(l)} (X) - f (X)\right) ^ {2} \right] \leq r \right\}. \tag {2.10}
+        \end{equation*}
+    \end{block}
+\end{frame}
+
+\begin{frame}{Interpretation and Computational Challenge}
+    \begin{itemize}
+        \item Therefore, $f _ { \mathcal { H } } ^ { \mathrm { r e g } }$ corresponds to the center of the smallest circle enclosing all functions of the form $\{ \textstyle \sum _ { l = 1 } ^ { L } q _ { l } f ^ { ( l ) } ( \cdot ) \mid q \in \mathcal { H } \}$ , known as the Chebyshev center.
+        \item For general convex subsets $\mathcal { H } \subseteq \Delta ^ { L }$ , solving (2.10) is NP-hard.
+        \item This proposition reveals that identifying $f _ { \mathcal { H } } ^ { \mathrm { r e g } }$ reduces to solving the Chebyshev center problem.
+        \item For an arbitrary convex set $\mathcal { H } \subseteq \Delta ^ { L }$ , computing the Chebyshev center is computationally intractable \cite{17}, except in special cases such as polyhedral \cite{35} or finite sets \cite{66}.
+        \item For example, when H is defined as the intersection of multiple ellipsoids, solving the optimization problem in (2.10) becomes NP-hard \cite{64}.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Advantage of the Reward-Based Approach}
+    \begin{itemize}
+        \item Therefore, the computational intractability limits the regret-based models’ usefulness when integrating prior information via a convex set H.
+        \item In contrast, our reward-based approach, introduced in Section 2.2 effectively incorporates prior information while maintaining computational efficiency.
+        \item As demonstrated in Sections 5.2 and 6, this prior integration leads to the improved predictive performance of the proposed approach on the target domain.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Comparison of Loss Functions}
+    We summarize the key distinctions among the distributionally robust models employing the three different loss functions in Table 1. Notably, the proposed reward function is the only one that produces a robust prediction model both independent of noise levels and computationally feasible when incorporating general convex prior mixture information.
+
+    \begin{table}[h]
+        \centering
+        \caption{Comparison of minimax optimization with respect to the choices of different loss functions}
+        \begin{tabular}{c|c|c|c}
+            Loss type & Squared Error & Regret & Reward (Ours) \\
+            \hline
+            Aggregation independent of noise levels & $\times$ & $\checkmark$ & $\checkmark$ \\
+            Computational feasibility with arbitrary convex set $\mathcal{H}$ & $\checkmark$ & $\times$ & $\checkmark$ \\
+        \end{tabular}
+    \end{table}
+\end{frame}
+
+\begin{frame}{Special Cases for Regret-Based Model}
+    We now move on to considering two special cases of H where the regret-based $f _ { \mathcal { H } } ^ { \mathrm { r e g } }$ is computationally feasible and will provide further insights for this regret-based approach.
+
+    \begin{block}{COROLLARY 2.2}
+        We consider two specifications of H as follows:
+        \begin{enumerate}
+            \item When $\mathcal { H } = \Delta ^ { L } , \ : f ^ { \mathrm { r e g } }$ is identified as:
+            % (Content for part (a) would continue here, but the provided text cuts off)
+        \end{enumerate}
+    \end{block}
+\end{frame}
+\subsection{Regret-Based Robust Model}
+
+\begin{frame}{Regret-Based Robust Model}
+    \begin{exampleblock}{Definition}
+        The regret-based robust model is defined as:
+        \begin{equation*}
+            f^{\text{reg}} = \sum_{l=1}^{L} q_{l}^{\text{reg}} \cdot f^{(l)} \quad \text{with} \quad q^{\text{reg}} = \underset{q \in \Delta^{L}}{\arg \min} \left\{q^{\intercal} \Gamma q - q^{\intercal} \gamma \right\}, \tag{2.11}
+        \end{equation*}
+        where $\Gamma_{k,l} = \mathbb{E}_{\mathbf{Q}_{X}} [ f^{(k)} (X) f^{(l)} (X) ]$ for $k, l \in [L]$, and $\gamma_{l} = \Gamma_{l,l}$ for $l \in [L]$.
+    \end{exampleblock}
+\end{frame}
+
+\begin{frame}{Regret-Based Robust Model (Cont.)}
+    \begin{block}{Constrained Formulation}
+        When $\mathcal{H}$ is defined as:
+        \begin{equation*}
+            \mathcal{H} := \left\{q \in \Delta^{L} \big |   \mathbb{E}_{\mathbf{Q}_{X}} \left[ \sum_{l = 1}^{L} (q_{l} - q_{l}^{\text{prior}}) f^{(l)} (X) \right]^{2} \leq \rho \right\}, \tag{2.12}
+        \end{equation*}
+        where $q^{\mathrm{prior}} \in \Delta^{L}$ denotes a prior weight vector and $\rho \ge 0$ controls the size of $\mathcal{H}$.
+    \end{block}
+    \begin{itemize}
+        \item Suppose $q^{\mathrm{prior}}$ lies strictly within $\Delta^{L}$ and $\rho$ is small enough such that $\mathcal{H}$ does not intersect the boundary of $\Delta^{L}$.
+        \item Then $f_{\mathcal{H}}^{\mathrm{reg}} = \sum_{l \in [L]} q_{l}^{\mathrm{prior}} f^{(l)}$, which is independent of the value of $\rho$.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Interpretation and Comparison}
+    \begin{itemize}
+        \item Result (a) is closely related to the works of \cite{ref36} and \cite{ref70}, who establish similar results for linear models and conditional average treatment effects in causal inference, respectively.
+        \item However, these works restrict the constraint set to simplexes or polyhedrons, whereas Proposition 2.2 shows that regret-based models become NP-hard for more general convex constraints.
+        \item For $\mathcal{H} = \Delta^{L}$, we compare its geometric interpretation with our proposed reward-based model $f^{*}$ and the squared-error based model $f^{\mathrm{sq}}$.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Geometric Interpretation for $L=3$}
+    \begin{figure}[htpb]
+        \centering
+        \includegraphics[width=0.8\linewidth]{images/57c86b4f16c2897fd45d2ca3e982c736ea16b70cb6065a3e79f095baa0bb3b7f.jpg}
+        \caption{Illustration of robust prediction models utilizing reward (ours), squared error, and regret, for $L = 3$ and $\mathcal{H} = \Delta^{3}$.}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Geometric Interpretation (Cont.)}
+    \begin{itemize}
+        \item \textbf{Left panel:} $f^{*}$ is the point closest to the origin within the convex hull of $\{ f^{(l)} \}_{l \in [L]}$.
+        \item \textbf{Middle panel:} $f^{\mathrm{sq}}$ corresponds to the source model with the largest noise level when this noise is substantially higher than that in other sources.
+        \item \textbf{Right panel:} $f^{\mathrm{reg}}$ is the center of the smallest circle enclosing all individual source models.
+    \end{itemize}
+    \begin{table}[h]
+        \centering
+        \begin{tabular}{c|cc}
+            Method & Source $f^{(l)}$ & Regret $f^{\mathrm{Reg}}$ \\
+            \hline
+            Reward (Ours) & 0 & 0 \\
+            Regret & 0 & 0 \\
+        \end{tabular}
+    \end{table}
+\end{frame}
+
+\begin{frame}{Discussion on Prior Weights}
+    \begin{itemize}
+        \item For Result (b) in Corollary 2.2, $\mathcal{H}$ is specified as (2.12), encoding prior information that the conditional mean of the future target lies close to $\sum_{l \in [L]} q_{l}^{\mathrm{prior}} f^{(l)} (X)$.
+        \item Corollary 2.2 reveals that $f_{\mathcal{H}}^{\mathrm{reg}}$ reduces exactly to $\sum_{l \in [L]} q_{l}^{\mathrm{prior}} f^{(l)} (X)$, independent of the radius $\rho$.
+        \item This implies the regret-based model $f_{\mathcal{H}}^{\mathrm{reg}}$ is determined solely by the prior weights.
+        \item In practice, $q^{\mathrm{prior}}$ may not be accurate, and one would expect the diameter $\rho$ to play a role in reflecting the uncertainty of this prior.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Summary of Loss/Reward Functions}
+    \begin{block}{Key Observation}
+        All of these loss or reward functions produce the same prediction model in the single-source setting, but they lead to different distributionally robust prediction models in the multi-source regime.
+    \end{block}
+\end{frame}
+
+\subsection{Extensions of the Robust Models}
+
+\begin{frame}{2.4. Extensions of the Robust Models}
+    We extend the proposed robust prediction model $f_{\mathcal{H}}^{*}$, defined in (2.5), to a more general form.
+    \begin{block}{Uncertainty Set via Conditional Means}
+        We define a broader uncertainty set:
+        \begin{equation*}
+            \mathcal{C}^{\prime}(\mathbf{Q}_{X}, \mathcal{H}) := \left\{\mathbf{T} = (\mathbf{Q}_{X}, \mathbf{T}_{Y | X}) \mid \mathbb{E}_{\mathbf{T}} [ Y | X ] = \sum_{l = 1}^{L} q_{l} \cdot \mathbb{E}_{\mathbf{P}^{(l)}} [ Y | X ], \quad q \in \mathcal{H} \right\}. \tag{2.13}
+        \end{equation*}
+    \end{block}
+    \begin{itemize}
+        \item $\mathcal{C}^{\prime}(\mathbf{Q}_{X}, \mathcal{H})$ is broader than $\mathcal{C}(\mathbf{Q}_{X}, \mathcal{H})$, with $\mathcal{C}(\mathbf{Q}_{X}, \mathcal{H}) \subseteq \mathcal{C}^{\prime}(\mathbf{Q}_{X}, \mathcal{H})$.
+        \item It only requires a mixture of the conditional means rather than the entire conditional distributions.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Extended Robust Prediction Model}
+    \begin{block}{Definition}
+        With a slight abuse of notation, we denote the robust prediction model based on $\mathcal{C}^{\prime}(\mathbf{Q}_{X}, \mathcal{H})$ also by $f_{\mathcal{H}}^{*}$:
+        \begin{equation*}
+            f_{\mathcal{H}}^{*} = \underset{f \in \mathcal{F}}{\arg \min} \underset{\mathbf{T} \in C^{\prime}(\mathbf{Q}_{X}, \mathcal{H})}{\max} \mathbf{R}_{\mathbf{T}}(f).
+        \end{equation*}
+    \end{block}
+    \begin{itemize}
+        \item $f_{\mathcal{H}}^{*}$ admits the same identification result as Theorem 2.1; see Supplement's Section A.1 \cite{ref62}.
+        \item Furthermore, the reward function $\mathbf{R}_{\mathbf{T}}(f)$ can be extended to compare $f(\cdot)$ with any deterministic benchmark function.
+        \item The identification theorem for this more general reward function is provided in Section A.1 of Supplements \cite{ref62}.
+    \end{itemize}
+\end{frame}
+
+\section{Algorithms: Distributionally Robust Learning}
+
+\begin{frame}{3. Algorithms: Distributionally Robust Learning}
+    We leverage Theorem 2.1 to devise an algorithm to estimate $f_{\mathcal{H}}^{*}$.
+    \begin{enumerate}
+        \item For each source domain $l \in [L]$, use labeled data $\{ X_{i}^{(l)}, Y_{i}^{(l)} \}_{i \in [n_{l}]}$ to fit the individual source model $f^{(l)}$ using a preferred ML method (e.g., random forests, boosting, neural networks).
+        \item The fitted model is denoted by $\widehat{f}^{(l)}$.
+        \item Construct the plug-in estimator of $f_{\mathcal{H}}^{*}$ via aggregation:
+    \end{enumerate}
+    \begin{equation*}
+        \widetilde{f}_{\mathcal{H}} = \sum_{l = 1}^{L} \widetilde{q}_{l} \cdot \widehat{f}^{(l)} \quad \text{with} \quad \widetilde{q} = \underset{q \in \mathcal{H}}{\arg \min} q^{\intercal} \widetilde{\Gamma} q, \tag{3.1}
+    \end{equation*}
+    where $\widetilde{\Gamma} \in \mathbb{R}^{L \times L}$ is the data-dependent estimator of $\Gamma$ with $\widetilde{\Gamma}_{k,l} = \frac{1}{N} \sum_{j=1}^{N} \widehat{f}^{(k)} (X_{j}^{\mathbf{Q}}) \widehat{f}^{(l)} (X_{j}^{\mathbf{Q}})$ for $k, l \in [L]$.
+\end{frame}
+
+\begin{frame}{Estimation Error Decomposition}
+    The estimation error of $\widetilde{f_{\mathcal{H}}}$ decomposes into two components:
+    \begin{enumerate}
+        \item The error of estimating individual source models $\{ f^{(l)} \}_{l \in [L]}$.
+        \item The error between the data-dependent aggregation weight $\widetilde{q}$ and the optimal weight $q^{*}$.
+    \end{enumerate}
+    \begin{itemize}
+        \item The first error can be minimized by tuning the ML methods for each source.
+        \item The second error depends on the difference $\widetilde{\Gamma} - \Gamma$.
+        \item We propose a bias-correction method to improve the estimation of $\Gamma$ and thus the weight.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Bias-Corrected Estimator}
+    Using a bias-corrected estimator $\widehat{\Gamma}$, we construct the estimator for $f_{\mathcal{H}}^{*}$ as:
+    \begin{equation*}
+        \widehat{f}_{\mathcal{H}} = \sum_{l = 1}^{L} \widehat{q}_{l} \cdot \widehat{f}^{(l)} \quad \text{with} \quad \widehat{q} = \underset{q \in \mathcal{H}}{\arg \min} q^{\intercal} \widehat{\Gamma} q. \tag{3.2}
+    \end{equation*}
+    \begin{itemize}
+        \item We explain the main idea behind this bias-corrected approach in Section 3.1.
+        \item Detailed construction is provided in Sections 3.2 (for the no covariate shift setting) and 3.3 (for the general covariate shift setting).
+    \end{itemize}
+\end{frame}
+
+\subsection{Bias Correction: Main Idea}
+
+\begin{frame}{3.1. Bias Correction: Main Idea}
+    \begin{itemize}
+        \item The plug-in estimator $\widetilde{\Gamma}$ is biased because it uses the same data to both fit the models $\widehat{f}^{(l)}$ and estimate their correlations.
+        \item This leads to an optimistic bias (underestimation of variance/covariance) in $\widetilde{\Gamma}$.
+        \item The bias-correction aims to remove this optimistic bias to obtain a more accurate estimate $\widehat{\Gamma}$ of the true matrix $\Gamma$.
+        \item A common technique is to use sample-splitting or cross-fitting, where different data subsets are used for model fitting and correlation estimation.
+    \end{itemize}
+\end{frame}
+\section{Bias Correction for the Matrix $\Gamma$}
+
+\begin{frame}{Main Idea of Bias Correction}
+    For $k , l \in [ L ]$ , the error of the plug-in estimator $\widetilde { \Gamma } _ { k , l }$ is decomposed as:
+    $$
+    \begin{array}{l} \widetilde {\Gamma} _ {k, l} - \Gamma_ {k, l} = \left\{\frac {1}{N} \sum_ {j = 1} ^ {N} \widehat {f} ^ {(k)} (X _ {j} ^ {\mathbf {Q}}) \widehat {f} ^ {(l)} (X _ {j} ^ {\mathbf {Q}}) - \mathbb {E} _ {\mathbf {Q} _ {X}} \left[ \widehat {f} ^ {(k)} (X) \widehat {f} ^ {(l)} (X) \right] \right\} \\ + \left\{\mathbb {E} _ {\mathbf {Q} _ {X}} \left[ \widehat {f} ^ {(k)} (X) \widehat {f} ^ {(l)} (X) \right] - \mathbb {E} _ {\mathbf {Q} _ {X}} \left[ f ^ {(k)} (X) f ^ {(l)} (X) \right] \right\}. \\ \end{array}
+    $$
+    The first term on the right-hand side represents the finite-sample variability, vanishing at the parametric rate, whereas the second term captures the estimation error of the product ($\widehat { f } ^ { ( k ) } \widehat { f } ^ { ( l ) }$).
+\end{frame}
+
+\begin{frame}{Decomposition of the Estimation Error}
+    We further decompose the second term as follows,
+    $$
+    \begin{array}{l} \underbrace {\mathbb {E} _ {\mathbf {Q} _ {X}} \left[ \widehat {f} ^ {(k)} (X) \left(\widehat {f} ^ {(l)} (X) - f ^ {(l)} (X)\right) \right]} _ {\text {Bias - kl}} + \underbrace {\mathbb {E} _ {\mathbf {Q} _ {X}} \left[ \widehat {f} ^ {(l)} (X) \left(\widehat {f} ^ {(k)} (X) - f ^ {(k)} (X)\right) \right]} _ {\text {Bias - lk}} \\ - \underbrace {\mathbb {E} _ {\mathbf {Q} _ {X}} \left[ \left(\widehat {f} ^ {(k)} (X) - f ^ {(k)} (X)\right) \left(\widehat {f} ^ {(l)} (X) - f ^ {(l)} (X)\right) \right]} _ {\text {Higher order bias}}. \\ \end{array}
+    $$
+    The “Higher-order bias” term typically diminishes at a faster rate and is negligible compared to the “Bias-kl” and “Bias-lk” terms, which are first-order error terms in either $\widehat { f } ^ { ( k ) } - f ^ { ( k ) }$ or $\widehat { f } ^ { ( l ) } - f ^ { ( l ) }$.
+\end{frame}
+
+\begin{frame}{Intuition for Estimating the Bias-kl Term}
+    Suppose the fitted individual models $\widehat { f } ^ { ( k ) } , \widehat { f } ^ { ( l ) }$ are independent of the data $( X , Y )$ drawn from the distribution $(\mathbf { Q } _ { X } , \mathbf { P } _ { Y | X } ^ { ( l ) } )$. Then, taking the expectation yields:
+    $$
+    \begin{array}{l} \mathbb {E} _ {(\mathbf {Q} _ {X}, \mathbf {P} _ {Y | X} ^ {(l)})} \left[ \widehat {f} ^ {(k)} (X) \left(\widehat {f} ^ {(l)} (X) - Y\right) \right] = \mathbb {E} _ {\mathbf {Q} _ {X}} \left[ \widehat {f} ^ {(k)} (X) \left(\widehat {f} ^ {(l)} (X) - \mathbb {E} _ {\mathbf {P} _ {Y | X} ^ {(l)}} [ Y | X ]\right) \right] \\ = \mathbb {E} _ {\mathbf {Q} _ {X}} \left[ \widehat {f} ^ {(k)} (X) \left(\widehat {f} ^ {(l)} (X) - f ^ {(l)} (X)\right) \right], \\ \end{array}
+    $$
+    which is exactly the "Bias-kl" term. If we have access to paired data $\{ X _ { i } , Y _ { i } \} _ { i \in [ m ] }$ i.i.d. drawn from $(\mathbf { Q } _ { X } , \mathbf { P } _ { Y | X } ^ { ( l ) } )$ that is independent of $\widehat { f } ^ { ( k ) } , \widehat { f } ^ { ( l ) }$, we can estimate the “Bias-kl” term by:
+    $$
+    \frac {1}{m} \sum_ {i = 1} ^ {m} \widehat {f} ^ {(k)} (X _ {i}) \left(\widehat {f} ^ {(l)} (X _ {i}) - Y _ {i}\right) \approx \text { Bias - kl }. 
+    $$
+    This provides an intuitive way to correct the bias of $\widetilde \Gamma$.
+\end{frame}
+
+\begin{frame}{Sample Splitting for Independence}
+    We employ sample-splitting to ensure independence. For each source $l \in [ L ]$, we randomly partition the data $\{ X _ { i } ^ { ( l ) } , Y _ { i } ^ { ( l ) } \} _ { i \in [ n _ { l } ] }$ into two disjoint subsets $\mathcal { A } _ { l }$ and $B _ { l }$. We denote the fitted models from $\mathcal { A } _ { l }$ and $B _ { l }$ by $\widehat { f } _ { \mathcal { A } } ^ { ( l ) }$ and $\widehat { f } _ { B } ^ { ( l ) }$, respectively. We define:
+    $$
+    \begin{array}{r l} {(3. 5)} & {\widehat {f} ^ {(l)} (X _ {i} ^ {(l)}) = \left\{ \begin{array}{l l} \widehat {f} _ {\mathcal {A}} ^ {(l)} (X _ {i} ^ {(l)}) & \mathrm{if} i \in \mathcal {B} _ {l} \\ \widehat {f} _ {\mathcal {B}} ^ {(l)} (X _ {i} ^ {(l)}) & \mathrm{if} i \in \mathcal {A} _ {l} \end{array} \right., \mathrm{and} \quad \widehat {f} ^ {(l)} (X _ {j} ^ {\mathbf {Q}}) = \frac {1}{2} \widehat {f} _ {\mathcal {A}} ^ {(l)} (X _ {j} ^ {\mathbf {Q}}) + \frac {1}{2} \widehat {f} _ {\mathcal {B}} ^ {(l)} (X _ {j} ^ {\mathbf {Q}}).} \end{array}
+    $$
+    This construction ensures $\widehat { f } ^ { ( l ) } ( \cdot )$ is independent of the sample it is applied to, which is essential for bias correction.
+\end{frame}
+
+\subsection{No Covariate Shift Setting.}
+
+\begin{frame}{3.2. No Covariate Shift Setting}
+    We first consider the setting without covariate shift, where $\mathbf { P } _ { X } ^ { ( l ) } = \mathbf { Q } _ { X }$ for all $l \in [ L ]$. In this case, each source data $\{X _ {i} ^ {(l)}, Y _ {i} ^ {(l)}\}_{i\in[n_l]}$ are i.i.d. samples from $(\mathbf { P } _ { X } ^ { ( l ) } , \mathbf { P } _ { Y | X } ^ { ( l ) } ) = (\mathbf { Q } _ { X } , \mathbf { P } _ { Y | X } ^ { ( l ) } )$. For $k , l \in [ L ]$, we correct the plug-in estimator $\widetilde { \Gamma } _ { k , l } = \frac { 1 } { N } \sum _ { j = 1 } ^ { N } \widehat { f } ^ { ( k ) } ( X _ { j } ^ { \mathbf { Q } } ) \widehat { f } ^ { ( l ) } ( X _ { j } ^ { \mathbf { Q } } )$ by subtracting estimates of the dominant bias terms. The resulting bias-corrected estimator is $\widehat { \Gamma } _ { k , l } = \widetilde { \Gamma } _ { k , l } - \widehat { \mathcal { D } } _ { k , l } - \widehat { \mathcal { D } } _ { l , k }$, where
+    $$
+    \widehat {\mathcal {D}} _ {k, l} = \frac {1}{n _ {l}} \sum_ {i = 1} ^ {n _ {l}} \widehat {f} ^ {(k)} (X _ {i} ^ {(l)}) \left(\widehat {f} ^ {(l)} (X _ {i} ^ {(l)}) - Y _ {i} ^ {(l)}\right), 
+    $$
+    $$
+    \widehat {\mathcal {D}} _ {l, k} = \frac {1}{n _ {l}} \sum_ {i = 1} ^ {n _ {l}} \widehat {f} ^ {(l)} (X _ {i} ^ {(k)}) \left(\widehat {f} ^ {(k)} (X _ {i} ^ {(k)}) - Y _ {i} ^ {(k)}\right).
+    $$
+    Here, $\widehat { \mathcal { D } } _ { k , l } , \widehat { \mathcal { D } } _ { l , k }$ estimate the "Bias-kl" and "Bias-lk" terms in (3.3), respectively.
+\end{frame}
+
+\subsection{Covariate Shift Setting.}
+
+\begin{frame}{3.3. Covariate Shift Setting}
+    In the covariate shift scenario, the target covariate distribution $\mathbf { Q } _ { X }$ may differ from the source distributions $\{ \mathbf { P } _ { X } ^ { ( l ) } \} _ { l \in [ L ] }$. We do not have direct access to data from $(\mathbf { Q } _ { X } , \mathbf { P } _ { Y | X } ^ { ( l ) } )$ for bias correction. To address this, we adopt an importance weighting strategy. The key idea is to assign weights to the source data $\{ X _ { i } ^ { ( l ) } , Y _ { i } ^ { ( l ) } \} _ { i \in [ n _ { l } ] }$ for each source $l \in [ L ]$, so that the reweighted source distribution resembles $(\mathbf { Q } _ { X } , \mathbf { P } _ { Y | X } ^ { ( l ) } )$.
+\end{frame}
+
+\begin{frame}{Density Ratio Estimation with Sample Splitting}
+    For each source $l \in [ L ]$, suppose $\mathbf { Q } _ { X }$ is absolutely continuous w.r.t. $\mathbf { P } _ { X } ^ { ( l ) }$ and define the density ratio $\omega ^ { ( l ) } ( x ) = d \mathbf { Q } _ { X } ( x ) / d \mathbf { P } _ { X } ^ { ( l ) } ( x )$. We estimate these density ratios $\{ \omega ^ { ( l ) } \} _ { l \in [ L ] }$ using sample-splitting. We construct $\widehat { \omega } _ { \mathcal { A } } ^ { ( l ) }$ using data from split $\mathcal { A } _ { l }$ and target covariates, and $\widehat { \omega } _ { B } ^ { ( l ) }$ using data from $B _ { l }$ and target covariates. We define the sample-split density ratio estimator:
+    $$
+    \widehat {\omega} ^ {(l)} (X _ {i} ^ {(l)}) = \left\{ \begin{array}{l l} \widehat {\omega} _ {\mathcal {A}} ^ {(l)} (X _ {i} ^ {(l)}) & \text { if   } i \in \mathcal {B} _ {l} \\ \widehat {\omega} _ {\mathcal {B}} ^ {(l)} (X _ {i} ^ {(l)}) & \text { if   } i \in \mathcal {A} _ {l} \end{array} \right.. 
+    $$
+    This ensures $\widehat { \omega } ^ { ( l ) } ( \cdot )$ is independent of the sample it is applied to.
+\end{frame}
+
+\begin{frame}{Bias-Corrected Estimator under Covariate Shift}
+    For $k , l \in [ L ]$, we construct the bias-corrected matrix estimator:
+    $$
+    \widehat {\Gamma} _ {k, l} = \widetilde {\Gamma} _ {k, l} - \widehat {\mathcal {D}} _ {k, l} - \widehat {\mathcal {D}} _ {l, k}, 
+    $$
+    where the plug-in estimator remains $\widetilde { \Gamma } _ { k , l } = \frac { 1 } { N } \sum _ { j = 1 } ^ { N } \widehat { f } ^ { ( k ) } ( X _ { j } ^ { \mathbf { Q } } ) \widehat { f } ^ { ( l ) } ( X _ { j } ^ { \mathbf { Q } } )$, and the terms $\widehat { \mathcal { D } } _ { k , l }$, $\widehat { \mathcal { D } } _ { l , k }$ estimate "Bias-kl" and "Bias-lk" terms. In the covariate shift setting, these are:
+    $$
+    \begin{array}{l} \widehat {\mathcal {D}} _ {k, l} = \frac {1}{n _ {l}} \sum_ {i = 1} ^ {n _ {l}} \widehat {\omega} ^ {(l)} (X _ {i} ^ {(l)}) \widehat {f} ^ {(k)} (X _ {i} ^ {(l)}) \left(\widehat {f} ^ {(l)} (X _ {i} ^ {(l)}) - Y _ {i} ^ {(l)}\right), \\ \widehat {\mathcal {D}} _ {l, k} = \frac {1}{n _ {k}} \sum_ {i = 1} ^ {n _ {k}} \widehat {\omega} ^ {(k)} (X _ {i} ^ {(k)}) \widehat {f} ^ {(l)} (X _ {i} ^ {(k)}) \left(\widehat {f} ^ {(k)} (X _ {i} ^ {(k)}) - Y _ {i} ^ {(k)}\right). \\ \end{array}
+    $$
+    The source data are reweighted by the corresponding density ratio estimators. The no covariate shift case is a special instance with $\widehat { w } ^ { ( l ) } ( \cdot ) \equiv \widehat { w } ^ { ( k ) } ( \cdot ) \equiv 1$.
+\end{frame}
+
+\subsection{Algorithm.}
+
+\begin{frame}{3.4. Algorithm}
+    \begin{itemize}
+        \item The full algorithm for constructing the bias-corrected estimator $\widehat{\Gamma}$ under covariate shift integrates the steps described:
+        \begin{enumerate}
+            \item For each source $l \in [L]$, split data into $\mathcal{A}_l$ and $B_l$.
+            \item Train individual models $\widehat{f}_{\mathcal{A}}^{(l)}$, $\widehat{f}_{B}^{(l)}$ and density ratio estimators $\widehat{\omega}_{\mathcal{A}}^{(l)}$, $\widehat{\omega}_{B}^{(l)}$ on respective splits.
+            \item Construct cross-predictions $\widehat{f}^{(l)}(\cdot)$ and cross-weightings $\widehat{\omega}^{(l)}(\cdot)$ as per (3.5) and (3.7).
+            \item Compute the plug-in estimator $\widetilde{\Gamma}_{k,l}$ using target domain data.
+            \item Compute bias correction terms $\widehat{\mathcal{D}}_{k,l}$ and $\widehat{\mathcal{D}}_{l,k}$ using the reweighted source data.
+            \item Output $\widehat{\Gamma}_{k,l} = \widetilde{\Gamma}_{k,l} - \widehat{\mathcal{D}}_{k,l} - \widehat{\mathcal{D}}_{l,k}$.
+        \end{enumerate}
+        \item This algorithm ensures the necessary independence for valid bias correction and handles potential covariate shifts through importance weighting.
+    \end{itemize}
+\end{frame}
+\section{Theoretical Justification}
+
+\begin{frame}{4. Theoretical Justification}
+    In this section, we establish the convergence rates for the plug-in estimator $\widetilde { f _ { \mathcal { H } } }$ defined in (3.1) and the bias-corrected estimator $\widehat { f _ { \mathcal { H } } }$ defined in (3.2). We start with the following condition.
+
+    \textbf{ASSUMPTION 1.} The number of source domains $L$ is finite. The matrix $\Gamma$ defined in (2.6) is positive definite with $\lambda _ { \operatorname* { m i n } } ( \Gamma ) > 0$ . There exists some positive constant $\sigma _ { \varepsilon } ^ { 2 } > 0$ such that $\max_{l \in [ L ]} \max _ { i \in [ n _ { l } ] } \mathbb { E } [ ( \varepsilon _ { i } ^ { ( l ) } ) ^ { 2 } | X _ { i } ^ { ( l ) } ] \le \sigma _ { \varepsilon } ^ { 2 }$.
+    
+    We assume the finite count of source domains to simplify the presentation, although our analysis can be extended to allow for growing $L$. The requirement of $\Gamma$ being positive definite is ensured if the individual source models $\{ f ^ { ( l ) } \} _ { l \in [ L ] }$ are linearly independent. As for the noise level, we do not impose homogeneity across or within sources but only require its second moment to be bounded by some constant.
+\end{frame}
+
+\begin{frame}{4. Theoretical Justification (Cont.)}
+    For a prediction model $f ( \cdot )$ , we define its $\ell _ { q }$ norm with respect to the target covariate distribution $\mathbf { Q } _ { X }$ as $\| f \| _ { \ell _ { q } ( \mathbf { Q } ) } : = ( \mathbb { E } _ { \mathbf { Q } _ { X } } [ f ( X ) ^ { q } ] ) ^ { 1 / q }$ for $q \geq 1$ . We further define the scale of individual source models as
+    $$
+    M := \max _ {l \in [ L ]} \max \left\{\| f ^ {(l)} \| _ {\ell_ {2} (\mathbf {Q})}, \| f ^ {(l)} \| _ {\ell_ {4} (\mathbf {Q})} \right\}. 
+    $$
+    
+    Note that we do not assume $M$ to be bounded; it is allowed to grow with the dimension $p$. For instance, in a high-dimensional linear setting where $f ^ { ( l ) } ( x ) { \stackrel { } { = } } x ^ { \mathsf { T } } \beta ^ { ( l ) }$ with $\beta ^ { ( l ) } \in \mathbb { R } ^ { p }$ , we have $M \asymp \operatorname* { m a x } _ { l \in [ L ] } \| \beta ^ { ( l ) } \rVert _ { 2 }$ , which may increase with $p$.
+\end{frame}
+
+\begin{frame}{4. Theoretical Justification (Cont.)}
+    For each source domain $l \in [ L ]$ , given the labeled data, we obtain the fitted individual source model ${ \widehat { f } } ^ { ( l ) }$ using the ML method of choice. Next, we assume that each ${ \widehat { f } } ^ { ( l ) }$ achieves a certain convergence rate in estimating the conditional mean model $f ^ { ( l ) }$ ; these rates will later be used to establish convergence results for our proposed DRoL estimators of the robust prediction model, as defined in (3.1) and (3.2). Let $n = \mathrm { m i n } _ { l \in [ L ] } n _ { l }$ denote the smallest sample size among L source domains. In the following assumption, we capture the convergence rate of the estimators $\{ \widehat { f } ^ { ( l ) } \} _ { l \in [ L ] }$ .
+    
+    \textbf{ASSUMPTION 2.} With probability larger than $1 - \tau _ { n }$ with $\tau _ { n } \to 0$ , there exists a positive sequence $\delta _ { n } > 0$ such that $\max _ { l \in [ L ] } \max \{ \| \widehat { f } ^ { ( l ) } - f ^ { ( l ) } \| _ { \ell _ { 2 } ( \mathbf { Q } ) } , \| \widehat { f } ^ { ( l ) } - f ^ { ( l ) } \| _ { \ell _ { 4 } ( \mathbf { Q } ) } \} \leq \delta _ { n }$.
+\end{frame}
+
+\begin{frame}{4. Theoretical Justification (Cont.)}
+    Without further specification, we consider that each fitted individual model ${ \widehat { f } } ^ { ( l ) }$ is a consistent estimator of the true $f ^ { ( l ) } \ ( { \mathrm { i . e . } } \ \delta _ { n } \to 0 )$ . Consistency has been established for various ML methods. For example, in high-dimensional sparse linear regression, estimators such as the Lasso or the Dantzig selector satisfy Assumption 2 with $\delta _ { n } = C \sqrt { s _ { \beta } \log p / n }$ , where $s _ { \beta } = \operatorname* { m a x } _ { l \in [ L ] } \| \beta ^ { ( l ) } \| _ { 0 }$ denotes the largest sparsity level of $\beta ^ { ( l ) }$ for $l \in [ L ]$ \cite{10,7}. In the context of random forests, \cite{6, 5, 51, 33} have established consistency results, with \cite{5} showing that under their conditions $\delta _ { n } ^ { 2 } = \bar { C } \cdot n ^ { - 0 . 7 5 / ( S \log 2 + 0 . 7 5 ) }$ , assuming that only $S$ out of the $p$ features play a role in the model. Similarly, \cite{49} and \cite{18} have demonstrated that certain neural networks satisfy Assumption 2; in particular, \cite{18} prove that if $f ^ { ( l ) }$ belongs to a Sobolev ball $\mathcal { W } ^ { \alpha , \infty } ( [ - 1 , 1 ] ^ { p } )$ with smoothness level $\alpha$, then one may take $\delta _ { n } ^ { 2 } = C \cdot ( n ^ { - \alpha / ( \alpha + p ) } \log ^ { 8 } n + \log \log n / n )$.
+\end{frame}
+
+\begin{frame}{4. Theoretical Justification (Cont.)}
+    The following theorem establishes the convergence rate for the plug-in DRoL estimator $\widetilde { f _ { \mathcal { H } } }$ as defined in (3.1).
+    
+    \textbf{THEOREM 4.1.} Suppose Assumptions 1 and 2 hold. With probability larger than $1 - 1 / t ^ { 2 } - \tau _ { n }$ for $t > 1$ and $\tau _ { n } \to 0$ , the plug-in estimator defined in (3.1) satisfies:
+    $$
+    \left\| \widetilde {f} _ {\mathcal {H}} - f _ {\mathcal {H}} ^ {*} \right\| _ {\ell_ {2} (\mathbf {Q})} \lesssim \delta_ {n} + t M \cdot \min \left\{\delta_ {n} ^ {2} + \frac {M ^ {2}}{\sqrt {N}} + \mathrm{Err} _ {0},   \rho_ {\mathcal {H}} \right\},   \text{with} \quad \mathrm{Err} _ {0} = M \delta_ {n}, 
+    $$
+    where $M$ is the scale of the individual source models as defined in $(4.1)$, $\delta _ { n }$ measures the estimation errors of fitted individual models defined in Assumption 2, and $\rho _ { \mathcal { H } } : = \operatorname* { m a x } _ { q , q ^ { \prime } \in \mathcal { H } } \| q - q ^ { \prime } \| _ { 2 }$ is the diameter of the set $\mathcal{H}$ that encodes the prior information.
+\end{frame}
+
+\begin{frame}{4. Theoretical Justification (Cont.)}
+    As shown in (4.2), the convergence rate of $\| \widetilde { f } _ { \mathcal { H } } - f _ { \mathcal { H } } ^ { * } \| _ { \ell _ { 2 } ( \mathbf { Q } ) }$ consists of two parts. The first term, $\delta _ { n }$ stems from the estimation error in each fitted individual model ${ \widehat { f } } ^ { ( l ) }$ . The second term $\min \left\{\delta_ {n} ^ {2} + \frac {M ^ {2}}{\sqrt {N}} + \mathrm{Err} _ {0}, \rho_ {\mathcal {H}} \right\}$ captures the error in estimating the optimal aggregation weights. The intuition behind taking the minimum is as follows: if the diameter $\rho_{\mathcal{H}}$ of the set $\mathcal{H}$ is relatively large, the error in the aggregation weight mainly comes from the uncertainty in estimating $\Gamma$; however, if $\rho_{\mathcal{H}}$ is smaller than the statistical precision achieved in estimating the weights, then the constraint imposed by the set $\mathcal{H}$ itself limits the error.
+\end{frame}
+
+\begin{frame}{4. Theoretical Justification (Cont.)}
+    For clarity, when $\delta _ { n } \ll M$ — that is, when the estimation error of ${ \widehat { f } } ^ { ( l ) }$ is small relative to the scale of $f ^ { ( l ) }$ — and when the constraint set $\mathcal{H}$ is sufficiently large so that $\rho_{\mathcal{H}}$ does not impose any restriction when computing the aggregation weight, Theorem 4.1 simplifies as
+    $$
+    \left\| \widetilde {f} _ {\mathcal {H}} - f _ {\mathcal {H}} ^ {*} \right\| _ {\ell_ {2} (\mathbf {Q})} \lesssim \delta_ {n} + M ^ {2} \delta_ {n} + \frac {M ^ {3}}{\sqrt {N}}. 
+    $$
+    In cases where $M$ is large (e.g., in high-dimensional settings where $M = \operatorname* { m a x } _ { l \in [ L ] } \| \beta ^ { ( l ) } \| _ { 2 }$ grows with the dimension $p$), the second term dominates the convergence rate. In the following Theorem 4.2, we show that the proposed bias-corrected estimator can substantially reduce this dominating term, $M ^ { 2 } \delta _ { n }$.
+\end{frame}
+
+\subsection{Rate Improvement with Bias Correction.}
+
+\begin{frame}{4.1. Rate Improvement with Bias Correction}
+    We now focus on the bias-corrected DRoL estimator $\widehat { f } _ { \mathcal { H } }$ and show that the bias correction leads to an improved convergence rate relative to its plug-in counterpart. To facilitate this analysis, we introduce convergence rate assumptions for the density ratio estimators.
+    
+    \textbf{ASSUMPTION 3.} There exist positive constants $c _ { 1 } , c _ { 2 } > 0$ such that $\omega ^ { ( l ) } ( x ) \in [ c _ { 1 } , c _ { 2 } ]$ for all $l \in [ L ]$ and $x \in \mathbb { R } ^ { p }$ . Furthermore, with probability at least $1 - \tau _ { n }$ with $\tau _ { n } \to 0$ , there exists a positive sequence $\eta _ { \omega }$ such that $\max _ { l \in [ L ] } \| \widehat { \omega } ^ { ( l ) } - \omega ^ { ( l ) } \| _ { \ell _ { 4 } ( \mathbf { Q } ) } \leq \eta _ { \omega }$ .
+\end{frame}
+
+\begin{frame}{4.1. Rate Improvement with Bias Correction (Cont.)}
+    The first part of Assumption 3 imposes a boundedness condition on $\omega ^ { ( l ) }$ , which is standard in the density ratio estimation literature (see, e.g., Assumptions 13.1 and 14.7 in \cite{56}). This condition is also consistent with the positivity (or overlap) assumption commonly invoked in causal inference \cite{45, 12}. The second part captures the convergence rate of the density ratio estimators $\{ \widehat \omega ^ { ( l ) } \} _ { l \in [ L ] }$ via the sequence $\eta _ { \omega }$ , where $\eta _ { \omega }$ may or may not converge to 0.
+    
+    Here, we give concrete examples of $\eta _ { \omega }$ . In the special setting with no covariate shift, we set $\widehat { \omega } ^ { ( l ) } \equiv \omega ^ { ( l ) } ( \cdot ) \equiv 1$ so that $\eta _ { \omega } = 0$ . In high-dimensional regimes with covariate shift, we further establish that $\eta _ { \omega } \lesssim \sqrt { s _ { \gamma } \log p / ( n + N ) }$ , where $s _ { \gamma } = \operatorname* { m a x } _ { l \in [ L ] } \| \gamma ^ { ( l ) } \| _ { 0 }$ denotes the maximum sparsity for the high-dimensional logistic density ratio model; see Corollary 3 in Section A.4 of Supplements \cite{62}. Moreover, we present a relaxed version of Assumption 3 in Section C.5 of Supplements \cite{62}, where instead of assuming the pointwise boundedness of $\boldsymbol { \omega } ^ { ( l ) }$ , we control the convergence rate of the relative error $\lVert \widehat { \omega } ^ { \ ( l ) } / \omega ^ { ( \widehat { l } ) } - 1 \rVert _ { \ell _ { 4 } ( \mathbf { Q } ) }$ .
+\end{frame}
+
+\begin{frame}{4.1. Rate Improvement with Bias Correction (Cont.)}
+    We now present the convergence rate for the bias-corrected DRoL estimator $\widehat { f } _ { \mathcal { H } }$ .
+    
+    \textbf{THEOREM 4.2.} Suppose Assumptions 1, 2, and 3 hold. With probability at least $1 - 1 / t ^ { 2 } - 2 \tau _ { n }$ for $t > 1$ and $\tau _ { n } \to 0$ , the estimator $\widehat { f } _ { \mathcal { H } }$ defined in (3.2) satisfies:
+    $$
+    \left\| \widehat {f} _ {\mathcal {H}} - f _ {\mathcal {H}} ^ {*} \right\| _ {\ell_ {2} (\mathbf {Q})} \lesssim \delta_ {n} + t M \cdot \min \left\{\delta_ {n} ^ {2} + \frac {M ^ {2}}{\sqrt {N}} + \operatorname{Err} _ {1} + \operatorname{Err} _ {2}, \rho_ {\mathcal {H}} \right\}, 
+    $$
+    $$
+    \text{with} \quad \mathrm{Err} _ {1} = \frac {(M + \delta_ {n}) \delta_ {n}}{\sqrt {n \wedge N}} + \frac {M + \delta_ {n}}{\sqrt {n}}, \quad \mathrm{Err} _ {2} = (M + \delta_ {n}) (\delta_ {n} + \frac {1}{\sqrt {n}}) \eta_ {\omega}.
+    $$
+\end{frame}
+\begin{frame}{Theoretical Guarantees (Continued)}
+    \begin{itemize}
+        \item where $M$ is the scale of the individual source models defined in (4.1), $\delta_{n}$ and $\eta_{\omega}$ measure the estimation errors of the fitted individual models and the density ratio estimators defined in Assumptions 2 and 3, respectively, and $\rho_{\mathcal{H}} := \operatorname*{max}_{\boldsymbol{q}, \boldsymbol{q}^{\prime} \in \mathcal{H}} \| \boldsymbol{q} - \boldsymbol{q}^{\prime} \|_{2}$ is the diameter of the set $\mathcal{H}$ that encodes the prior information.
+        \item In comparison to Theorem 4.1, the bound here replaces the term $\mathrm{Err}_{0} = M \delta_{n}$ in (4.2) with $\mathrm{Err}_{1} + \mathrm{Err}_{2}$.
+        \item The term $\mathrm{Err}_{1}$ represents the bias estimation error with a known density ratio, while $\mathrm{Err_{2}}$ captures the bias estimation error due to the density ratio estimation.
+        \item Generally, $\mathrm{Err_{1} + Err_{2}}$ is smaller than $\mathrm{Err}_{0}$, indicating the effectiveness of bias correction.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Simplified Rate for Bias-Corrected Estimator}
+    \begin{itemize}
+        \item Next, we simplify this theorem and discuss how the bias-corrected $\widehat{f}_{\mathcal{H}}$ achieves a smaller estimation error compared to the plug-in estimator.
+        \item We consider the scenario where $\delta_{n} \ll M$ (i.e., the estimation error of ${\widehat{f}}^{(l)}$ is small relative to the scale of $f^{(l)}$) and the constraint set $\mathcal{H}$ is sufficiently large so that $\rho_{\mathcal{H}}$ does not impose a restriction on the aggregation weight estimation.
+        \item Then, Theorem 4.2 simplifies to
+    \end{itemize}
+    \begin{equation*}
+        \left\| \widehat{f} _{\mathcal{H}} - f _{\mathcal{H}} ^{*} \right\| _{\ell_{2} (\mathbf{Q})} \lesssim \delta_{n} + M ^{2} \delta_{n} \cdot (r _{n} + \eta_{\omega}) + \frac {M ^{3}}{\sqrt {N}}, \mathrm{with} r _{n} = \frac {1}{\sqrt {n \wedge N}} + \frac {\delta_{n}}{M} + \frac {1}{\delta_{n} \sqrt {n}}.
+    \end{equation*}
+\end{frame}
+
+\begin{frame}{Interpretation of the Simplified Rate}
+    \begin{itemize}
+        \item By comparing this rate to that of the plug-in estimator in (4.3), we observe that the bias-correction step effectively shrinks the term $M^{2} \delta_{n}$ by the multiplicative factor $r_{n} + \eta_{\omega}$.
+        \item Notably, $r_{n}$ diminishes to zero whenever $\delta_{n} / M \to 0$ and the convergence rate of the individual estimators $\{ \widehat{f}^{(l)} \}_{l \in [L]}$ is slower than $n^{-1/2}$, which holds for most ML estimators, including high-dimensional regression, random forests, and deep neural networks.
+        \item Furthermore, if the density ratio estimators are consistent with $\eta_{\omega} \to 0$, the overall multiplicative factor $r_{n} + \eta_{\omega}$ vanishes, leading to a strictly improved convergence rate.
+        \item In the special case of no covariate shift, where there is no need to estimate density ratios (i.e., $\eta_{\omega} = 0$), the bias-corrected estimator $\widehat{f}_{\mathcal{H}}$ improves precisely by the factor $r_{n}$.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Robustness and Summary}
+    \begin{itemize}
+        \item Notably, even if the density ratio estimators are inconsistent, with $\eta_{\omega}$ remaining at a constant level, the factor $r_{n} + \eta_{\omega}$ is still controlled, ensuring that the bias-corrected estimator $\widehat{f_{\mathcal{H}}}$ is at least as good as the plug-in estimator.
+        \item This finding highlights the robustness of our proposed bias-correction approach with respect to potential mis-specification in the density ratio model.
+        \item In summary, our analysis demonstrates that the bias-correction step yields an estimator with a smaller estimation error, and it attains a strictly better rate when the density ratio estimators are consistent.
+        \item We also illustrate the numerical advantages of the bias-corrected estimator in Section 5.3, where it consistently outperforms the naive plug-in estimator.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Reward Convergence}
+    \begin{itemize}
+        \item In the discussion above, we quantified the estimation error of the DRoL estimator $\widehat{f}_{\mathcal{H}}$ in terms of its $\ell_{2}(\mathbf{Q})$ distance to the actual $f_{\mathcal{H}}^{*}$.
+        \item We now translate this result to the objective function by quantifying the difference in rewards.
+        \item \textbf{THEOREM 4.3.} For the target distribution $\mathbf{Q}$ with the conditional outcome model defined as $f^{\mathbf{Q}}(X^{\mathbf{Q}}) := \mathbb{E}[Y^{\mathbf{Q}} \mid X^{\mathbf{Q}}]$, we have
+    \end{itemize}
+    \begin{equation*}
+        \left| \mathbf{R} _{\mathbf{Q}} (\widehat{f} _{\mathcal{H}}) - \mathbf{R} _{\mathbf{Q}} (f _{\mathcal{H}} ^{*}) \right| \leq 2 \| f ^{\mathbf{Q}} - f _{\mathcal{H}} ^{*} \| _{\ell_{2} (\mathbf{Q})} \cdot \| \widehat{f} _{\mathcal{H}} - f _{\mathcal{H}} ^{*} \| _{\ell_{2} (\mathbf{Q})} + \| \widehat{f} _{\mathcal{H}} - f _{\mathcal{H}} ^{*} \| _{\ell_{2} (\mathbf{Q})} ^{2},
+    \end{equation*}
+    \begin{itemize}
+        \item where the reward function $\mathbf{R}_{\mathbf{Q}}(f_{\mathcal{H}}^{*})$ is defined in (2.2).
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Implications of Theorem 4.3}
+    \begin{itemize}
+        \item This theorem shows that the convergence rate of the reward difference $|\mathbf{R_{Q}}({\widehat{f}}_{\mathcal{H}}) - \mathbf{R}_{\mathbf{Q}}(f_{\mathcal{H}}^{*})|$ is directly determined by the convergence rate of $\|\widehat{f}_{\mathcal{H}} - f_{\mathcal{H}}^{*}\|_{\ell_{2}(\mathbf{Q})}$.
+        \item In particular, if $\widehat{f}_{\mathcal{H}}$ is a consistent estimator of $f_{\mathcal{H}}^{*}$ and the distance $\|f^{\mathbf{Q}} - f_{\mathcal{H}}^{*}\|_{\ell_{2}({\mathbf{Q}})}$ is bounded by a constant, then the reward of our bias-corrected estimator converges to the reward of the population-level model $f_{\mathcal{H}}^{*}$.
+        \item It is worth noting that Theorem 4.3 also applies to the plug-in DRoL estimator (with $\widehat{f}_{\mathcal{H}}$ replaced by $\tilde{f}_{\mathcal{H}}$).
+        \item Theorems 4.1, 4.2, and 4.3 together provide a theoretical framework for analyzing the proposed robust prediction model estimators, addressing the estimation error in both the model parameters and the objective function value.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Application of the Framework}
+    \begin{itemize}
+        \item This framework can be applied to concrete settings by verifying the estimation errors of individual source models and density ratio estimators, as specified in Assumptions 2 and 3.
+        \item In particular, in Section A.4 of Supplements [62], we achieve a rate of $n^{-1/2}$ in the context of low-dimensional linear regression and a rate of $\sqrt{s \log p / n}$ in high-dimensional settings (with $s$ denoting the sparsity level).
+    \end{itemize}
+\end{frame}
+
+\section{Simulations.}
+
+\begin{frame}{5. Simulations.}
+    \begin{itemize}
+        \item We evaluate the effectiveness of our proposed DRoL method through a series of simulation studies.
+        \item The experiments are organized as follows.
+        \begin{itemize}
+            \item In Section 5.1, we compare DRoL with various methods, including the ERM approach, the unsupervised domain adaptation technique, and Group DRO, in terms of the worst-case reward.
+            \item In Section 5.2, we investigate the impact of different specifications of prior information on DRoL’s performance.
+            \item Finally, Section 5.3 demonstrates the advantages of our bias-corrected estimator compared to a plug-in estimator that directly utilizes ML algorithms without bias correction.
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Simulated Data Setup}
+    \begin{itemize}
+        \item Next, we describe the simulated data setup. The simulation involves generating labeled data from $L$ source domains and unlabeled data from the target domain.
+        \item For each source domain $l \in [L]$, the labeled data $\{ X_{i}^{(l)}, Y_{i}^{(l)} \}_{i \in [n_{l}]}$ are i.i.d. generated as follows:
+    \end{itemize}
+    \begin{equation*}
+        X_{i}^{(l)} \sim \mathcal{N} (0_{5}, I_{5}), \quad Y_{i}^{(l)} = f^{(l)} (X_{i}) + \varepsilon_{i}^{(l)}, \quad \text{ with } \quad \varepsilon_{i}^{(l)} \sim \mathcal{N} (0, 1).
+    \end{equation*}
+    \begin{itemize}
+        \item We now specify the form of the individual source model $f^{(l)}$ for each $l \in [L]$
+    \end{itemize}
+    \begin{equation*}
+        f^{(l)} (x) = \sin (x ^{\intercal} \beta^{(l)}) + x ^{\intercal} A^{(l)} x - \mathrm{Tr} (A^{(l)}), \tag{5.1}
+    \end{equation*}
+    \begin{itemize}
+        \item where $\beta^{(l)} \in \mathbb{R}^{5}$ is generated by drawing each entry independently from $\mathrm{Unif}(-1, 1)$ and $A^{(l)} \in \mathbb{R}^{5 \times 5}$ is generated by drawing each entry independently from $\mathrm{Unif}(-0.5, 0.5)$.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Simulated Data Setup (Continued)}
+    \begin{itemize}
+        \item These parameters $\beta^{(l)}$ and $A^{(l)}$, for $l \in [L]$, are generated randomly once and then fixed throughout the 200 simulation rounds, ensuring consistency across replications.
+        \item For the target domain, the unlabeled data $\{ X_{j}^{\mathbf{Q}} \}_{j \in [N]}$ are i.i.d. drawn from $\mathbf{Q}_{X} = \mathcal{N}\left( (1, -1, 0.5, 0, 0)^{\top}, I_{5} \right)$.
+    \end{itemize}
+\end{frame}
+
+\subsection{Comparison of Worst-case Reward.}
+
+\begin{frame}{5.1. Comparison of Worst-case Reward.}
+    \begin{itemize}
+        \item We evaluate our proposed DRoL approach – implemented via Algorithm 1 with the default $\mathcal{H} = \Delta^{L}$ – against several alternative methods by comparing their worst-case rewards over all distributions in the uncertainty class $\mathcal{C}(\mathbf{Q}_{X})$, defined in (2.1).
+        \item Below is a brief description of each method. Except for GroupDRO (which has to be implemented via gradient-based neural networks), all methods, including our DRoL approach, are implemented using XGBoost with 5-fold cross-validation.
+        \item We note that, unlike standard approaches that evaluate performance based on squared error loss, we focus on the reward function; the rationale is detailed in Section 2.3.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Compared Methods}
+    \begin{itemize}
+        \item \textbf{ERM.} This method pools all source data and maximizes the empirical reward:
+        \begin{equation*}
+            \underset {f \in \mathcal{F}} {\arg \max} \frac {1}{\sum_{l = 1}^{L} n_{l}} \sum_{l = 1}^{L} \sum_{i = 1}^{n_{l}} \left[ (Y_{i}^{(l)})^{2} - (Y_{i}^{(l)} - f (X_{i}^{(l)}))^{2} \right].
+        \end{equation*}
+        \item \textbf{ImpWeight.} A common technique in unsupervised domain adaptation is given by reweighting each $l$-th source data sample by an estimated $\bar{\boldsymbol{\omega}}^{(l)}(\boldsymbol{x})$ of importance (density) ratio ${\omega^{(l)}}(x) = d\mathbf{Q}_{X}(x) / d\mathbf{P}^{(l)}(x)$. In our implementation, we estimate these density ratios using logistic regression, and then maximize the empirical reward over the pooled, reweighted data:
+        \begin{equation*}
+            \underset {f \in \mathcal{F}} {\arg \max} \frac {1}{\sum_{l = 1}^{L} \sum_{i = 1}^{n_{l}} \widehat{\omega}^{(l)} (X_{i}^{(l)})} \sum_{l = 1}^{L} \sum_{i = 1}^{n_{l}} \left\{\widehat{\omega}^{(l)} (X_{i}^{(l)}) \left[ (Y_{i}^{(l)})^{2} - (Y_{i}^{(l)} - f (X_{i}^{(l)}))^{2} \right] \right\}.
+        \end{equation*}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Compared Methods (Continued)}
+    \begin{itemize}
+        \item \textbf{GroupDRO.} This approach maximizes the worst-case (group-wise) empirical reward across the source domains:
+        \begin{equation*}
+            \underset {f \in \mathcal{F}} {\arg \max} \underset {1 \leq l \leq L} {\min} \frac {1}{n_{l}} \sum_{i = 1}^{n_{l}} \left[ (Y_{i}^{(l)})^{2} - (Y_{i}^{(l)} - f (X_{i}^{(l)}))^{2} \right],
+        \end{equation*}
+        implemented via the nested gradient-based algorithm for Group DRO, as detailed in Algorithm 1 of the work [47].
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Experimental Setup and Results}
+    \begin{itemize}
+        \item We consider scenarios with a varying number of source domains, where $L$ ranges in $\{3, 4, ..., 10\}$.
+        \item In all experiments, the sample size for the unlabeled target data is fixed at $N = 20,000$.
+        \item In contrast, the source domain sample sizes follow two schemes:
+        \begin{enumerate}
+            \item \textbf{Even Mixture:} $n_{l} = 1000$ for all $l \in [L]$;
+            \item \textbf{Uneven Mixture:} $n_{1} = 500 \cdot L$ for the first source, and $n_{l} = 500$ for all $l \geq 2$.
+        \end{enumerate}
+        \item The results based on 200 simulation rounds are presented in Figure 4.
+        \item Recall that a higher reward indicates better predictive performance.
+        \item Our proposed DRoL method consistently achieves better worst-case reward than the other three methods across all values of $L$.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Figure 4: Worst-case Reward Comparison}
+    \begin{figure}[htpb]
+        \begin{center}
+            \includegraphics[width=0.8\linewidth]{images/86959fd1c5db735be6ca6759fd3d13e52cbaa807c952828befc89c6e7fad97b4.jpg}
+        \end{center}
+        \caption{Comparison of worst-case reward for different methods under even and uneven mixture settings.}
+    \end{figure}
+\end{frame}
+\begin{frame}{Comparison with Baselines (Figure 4)}
+    \begin{itemize}
+        \item We compare DRoL with ERM, ImpWeight, and GroupDRO.
+        \item Vary the number of source domains $L$ from 3 to 10.
+        \item Two mixture schemes:
+        \begin{itemize}
+            \item \textbf{Even Mixture}: $n_l = 1000$ for all $l \in [L]$.
+            \item \textbf{Uneven Mixture}: $n_1 = 500 \cdot L$, $n_l = 500$ for $l \geq 2$.
+        \end{itemize}
+        \item Metric: Worst-case reward over the uncertainty class $\mathcal{C}(\mathbf{Q}_X)$.
+    \end{itemize}
+    \begin{table}[h]
+        \centering
+        \scriptsize
+        \begin{tabular}{c|c|c|c|c}
+            \hline
+            Method & $L$ & Even Mixture - Worst-case Reward & Uneven Mixture - $L$ & Uneven Mixture - Worst-case Reward \\
+            \hline
+            DRoL & 3 & 0.8 & 0.9 & 0.4 \\
+            DRoL & 4 & 0.75 & 0.85 & 0.45 \\
+            DRoL & 5 & 0.65 & 0.8 & 0.3 \\
+            DRoL & 6 & 0.6 & 0.75 & 0.25 \\
+            DRoL & 7 & 0.55 & 0.7 & 0.2 \\
+            DRoL & 8 & 0.5 & 0.65 & 0.15 \\
+            DRoL & 9 & 0.45 & 0.6 & 0.1 \\
+            DRoL & 10 & 0.4 & 0.55 & 0.05 \\
+            \hline
+            ERM & 3 & 0.45 & -0.4 & -0.6 \\
+            ERM & 4 & -0.45 & -1.4 & -1.2 \\
+            ERM & 5 & -0.3 & -1.2 & -1.1 \\
+            ERM & 6 & -0.25 & -1.1 & -1.0 \\
+            ERM & 7 & -0.2 & -1.3 & -1.2 \\
+            ERM & 8 & -0.15 & -1.4 & -1.3 \\
+            ERM & 9 & -0.1 & -1.5 & -1.4 \\
+            ERM & 10 & -0.05 & -2.5 & -2.6 \\
+            \hline
+            ImpWeight & 3 & -0.35 & -0.7 & -1.1 \\
+            ImpWeight & 4 & -0.45 & -1.2 & -1.3 \\
+            ImpWeight & 5 & -0.5 & -1.3 & -1.4 \\
+            ImpWeight & 6 & -0.55 & -1.4 & -1.5 \\
+            ImpWeight & 7 & -0.6 & -1.5 & -1.6 \\
+            ImpWeight & 8 & -0.65 & -1.4 & -1.5 \\
+            ImpWeight & 9 & -0.7 & -1.3 & -1.4 \\
+            ImpWeight & 10 & -0.75 & -2.5 & -2.6 \\
+            \hline
+            GDRO & 3 & 0.4 & 0.45 & 0.3 \\
+            GDRO & 4 & 0.35 & 0.4 & 0.35 \\
+            GDRO & 5 & 0.3 & 0.35 & 0.25 \\
+            GDRO & 6 & 0.25 & 0.3 & 0.2 \\
+            GDRO & 7 & 0.2 & 0.25 & 0.15 \\
+            GDRO & 8 & 0.15 & 0.2 & 0.1 \\
+            GDRO & 9 & 0.1 & 0.15 & 0.05 \\
+            GDRO & 10 & 0.05 & 0.1 & -0.1 \\
+            \hline
+        \end{tabular}
+    \end{table}
+\end{frame}
+
+\begin{frame}{Comparison with Baselines: Key Observations}
+    \begin{itemize}
+        \item Comparing the left and right panels of Figure 4, we observe that the prediction models produced by ERM and ImpWeight vary markedly between the even and uneven mixture schemes.
+        \item This suggests that their performance is highly sensitive to the relative proportions of each source’s sample size when the data are pooled.
+        \item Moreover, even though ImpWeight leverages unlabeled target data, unlike ERM, their worst-case rewards over the uncertainty class $\mathcal{C}(\mathbf{Q}_X)$ are quite similar.
+        \item In contrast, both GroupDRO and our DRoL produce robust prediction models that perform consistently under both the even and uneven mixture schemes.
+        \item Importantly, since GroupDRO is designed for a different setting where target data are not available, and as a result, it does not incorporate unlabeled target data into its formulation.
+        \item Consequently, its robust prediction model is less tailored to the target domain compared to that of DRoL, which leverages the unlabeled target data to improve performance.
+    \end{itemize}
+\end{frame}
+
+\subsection{Impact of Prior Information.}
+
+\begin{frame}{Impact of Prior Information}
+    \begin{itemize}
+        \item We investigate how different specifications of the constraint set $\mathcal{H}$ affect the predictive performance of DRoL.
+        \item In practice, users may determine the constraint based on their target data $\{X_j^{\mathbf{Q}}\}_{j \in [N]}$.
+        \item In this subsection, we assume a small set of labeled target samples $\{X_k^{\mathbf{Q}}, Y_k^{\mathbf{Q}}\}_{k \in N_0}$ (with $N_0 \ll N$) is available.
+        \item We describe how the labeled target data is utilized in our experiment.
+        \begin{enumerate}
+            \item For each source domain, fit the individual source model $\widehat{f}^{(l)}$.
+            \item Determine the optimal aggregation of these fitted individual models that fits the limited labeled target data.
+        \end{enumerate}
+        \item The optimal weight vector, denoted by $\widehat{q}^{\mathrm{label}}$, is obtained via:
+        \begin{equation*}
+            \widehat{q}^{\text{label}} = \underset{q \in \Delta^{L}}{\arg \min} \frac{1}{N_0} \sum_{k=1}^{N_0} \left[ Y_k^{\mathbf{Q}} - \sum_{l=1}^{L} q_l \cdot \widehat{f}^{(l)}(X_k^{\mathbf{Q}}) \right]^2. \tag{5.2}
+        \end{equation*}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Incorporating Prior Information}
+    \begin{itemize}
+        \item We incorporate this information by defining the constraint set:
+        \[
+        \mathcal{H} = \left\{ q \in \Delta^{L} \mid \| q - \widehat{q}^{\mathrm{label}} \|_2 \leq \rho \right\},
+        \]
+        where $\rho \geq 0$ is the parameter controlling the size of $\mathcal{H}$.
+        \item We then run Algorithm 1 using this constraint set and refer to the resulting method as \textbf{DRoL-Label}.
+        \item In the absence of specific domain expertise, this procedure represents one practical way to derive the prior information $\mathcal{H}$ from a limited amount of labeled target data.
+        \item More formal approaches that leverage small amounts of labeled target data with theoretical guarantees are provided in \cite{65}.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Experimental Setup for Prior Information}
+    \begin{itemize}
+        \item Assume the target conditional mean satisfies:
+        \[
+        \mathbb{E}_{\mathbf{Q}}[Y \mid X] = \sum_{l=1}^{L} q_l^{\mathbf{Q}} \cdot \bar{f}^{(l)}(X),
+        \]
+        where $q^{\mathbf{Q}} \in \Delta^{L}$ is the (unknown) true mixture weight vector with $q^{\mathbf{Q}} = (0.6, \frac{0.4}{3}, \frac{0.4}{3}, \frac{0.4}{3})^{\intercal}$.
+        \item The small set of labeled target samples $\{X_k^{\mathbf{Q}}, Y_k^{\mathbf{Q}}\}_{k \in N_0}$ are generated as follows:
+        \[
+        X_k^{\mathbf{Q}} \sim \mathbf{Q}_X, \quad Y_k^{\mathbf{Q}} = \sum_{l=1}^{L} \gamma_l^{\mathbf{Q}} \cdot f^{(l)}(X_k^{\mathbf{Q}}) + \varepsilon_k^{\mathbf{Q}}, \quad \text{with } \varepsilon_k^{\mathbf{Q}} \sim \mathcal{N}(0, 1),
+        \]
+        where $\varepsilon_k^{\mathbf{Q}}$ is independent of $X_k^{\mathbf{Q}}$ and the individual source models $\{f^{(l)}\}_{l \in [L]}$ are specified in (5.1).
+        \item We vary $N_0 \in \{20, 50, 100\}$ and $\rho \in [0, 0.9]$.
+        \item Fix $L = 4$, $n_l = 1000$, and $N = 20,000$.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Compared Methods for Prior Information}
+    We compare \textbf{DRoL-Label} with the following methods:
+    \begin{itemize}
+        \item \textbf{DRoL-Unif}: Constructs the constraint set around the uniform weight vector $q^{\mathrm{unif}} = (0.25, 0.25, 0.25, 0.25)^{\top}$, i.e., $\mathcal{H} = \left\{ q \in \Delta^{L} \mid \| q - q^{\mathrm{unif}} \|_2 \leq \rho \right\}$.
+        \item \textbf{DRoL-Default}: Without prior information, the proposed DRoL sets $\mathcal{H} = \Delta^{L}$ as a default.
+        \item \textbf{TargetOnly}: Fits a prediction model using only the limited labeled target data, without incorporating any source domain data.
+    \end{itemize}
+    \begin{table}[h]
+        \centering
+        \scriptsize
+        \begin{tabular}{c|c|c|c}
+            \hline
+            Methods & $N_0 = 20$ & $N_0 = 50$ & $N_0 = 100$ \\
+            \hline
+            DRoL-Label & 3.0 & 3.0 & 3.0 \\
+            DRoL-Unif & 1.5 & 1.5 & 1.5 \\
+            DRoL-Default & 1.5 & 1.5 & 1.5 \\
+            TargetOnly & 0.0 & 1.5 & 2.0 \\
+            \hline
+        \end{tabular}
+        \caption{Example reward values for different methods and $N_0$.}
+    \end{table}
+\end{frame}
+
+\begin{frame}{Results: Impact of Prior Information (Figure 5)}
+    \begin{figure}[htpb]
+        \centering
+        \includegraphics[width=0.8\linewidth]{images/97da36bd3bd48fdfec3e9412cfcdece7a029371175bba07470ec299191ec925f.jpg}
+        \caption{Comparison of different methods in terms of the reward evaluated on the target distribution $\mathbf{Q}$. The plotted curves represent the mean reward computed over 200 simulation rounds, while the shaded error bands indicate the 10th and 90th percentile variability across these rounds. Here, the target conditional outcome model $\mathbf{Q}_{Y \mid X}$ is generated as a mixture of the source conditional outcome models $\{\mathbf{P}_{Y|X}^{(l)}\}_{l \in [4]}$ with mixture weights $\gamma^{\mathbf{Q}} = (0.6, \frac{0.4}{3}, \frac{0.4}{3}, \frac{0.4}{3})^{\intercal}$. The experiment fixes the number of source domains at $L = 4$ (with $n_l = 2000$ samples), the unlabeled target sample size at $N = 20,000$, and varies $N_0 \in \{20, 50, 100\}$ (which are used only in DRoL-Label and TargetOnly) and the parameter $\rho \in [0, 0.9]$ that controls the size of the constraint set $\mathcal{H}$.}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Analysis of Prior Information Results}
+    \begin{itemize}
+        \item Figure 5 presents the results of 200 simulation rounds.
+        \item \textbf{DRoL-Label vs. DRoL-Default}: Even a small amount of labeled target data provides valuable insights, enabling DRoL-Label to consistently outperform DRoL-Default across all $N_0$ and $\rho$.
+        \item As $\rho$ increases and $\mathcal{H}$ expands to $\Delta^{L}$, the performance of DRoL-Label converges to that of DRoL-Default.
+        \item \textbf{DRoL-Unif}: Simulates a naive assumption that the target domain is an equally weighted average of the source domains.
+        \begin{itemize}
+            \item When $\rho$ is small (tight constraint), this naive prior leads to poorer performance compared to DRoL-Default.
+            \item As $\rho$ increases, the negative impact diminishes, and performance converges to DRoL-Default.
+        \end{itemize}
+        \item This highlights that incorporating a mistakenly specified prior can degrade performance, underscoring the importance of carefully setting $\mathcal{H}$ to balance predictiveness and robustness.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Analysis of TargetOnly Benchmark}
+    \begin{itemize}
+        \item \textbf{TargetOnly} builds the prediction model solely from the limited labeled target data.
+        \item When labeled target samples are too few (e.g., $N_0 = 20$ or 50), the proposed DRoL methods substantially outperform TargetOnly.
+        \item As $N_0$ increases to 100, the performance of TargetOnly starts to outperform DRoL-Default (which does not incorporate prior information).
+        \item Nonetheless, \textbf{DRoL-Label}, which effectively combines information from both the source domains and the labeled target data, delivers better performance compared to TargetOnly for our considered range of $N_0$.
+    \end{itemize}
+\end{frame}
+
+\subsection{Effectiveness of Bias Correction.}
+
+\begin{frame}{Effectiveness of Bias Correction}
+    \begin{itemize}
+        \item We assess the impact of bias correction in our proposed DRoL Algorithm 1.
+        \item Compare it with a plug-in approach that simply aggregates the ML-fitted individual source models without bias correction.
+        \item Experimental setup:
+        \begin{itemize}
+            \item Fix $L = 3$.
+            \item Vary source sample sizes $n_l \in \{100, 300, 500, 1000\}$.
+            \item Keep unlabeled target sample size fixed at $N = 20,000$.
+            \item Use default constraint set $\mathcal{H} = \Delta^{L}$.
+        \end{itemize}
+        \item Compare three variants of DRoL:
+        \begin{itemize}
+            \item \textbf{PlugIn}: Aggregates individual source models with weights computed directly from ML-fitted models, without bias correction (as in (3.1)).
+            \item \textbf{Logistic}: Estimates density ratios $\{\widehat{\omega}^{(l)}\}_{l \in [L]}$ using logistic regression for bias correction (Algorithm 1).
+            \item \textbf{Oracle}: Uses the true density ratios $\{\omega^{(l)}\}_{l \in [L]}$ for bias correction (Algorithm 1).
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Results: Effectiveness of Bias Correction (Figure 6)}
+    \begin{figure}[htpb]
+        \centering
+        \includegraphics[width=0.8\linewidth]{images/8525d1c8b8b18f71f6df1fb7ed5fb8cdd25ac1f43c387afdd263efa1bb0d6596.jpg}
+        \caption{Comparison of variants of DRoL estimators. PlugIn denotes the plug-in DRoL estimator with $\mathcal{H} = \Delta^{L}$. In contrast, Logistic and Oracle are bias-corrected DRoL estimators implemented via Algorithm 1 with $\mathcal{H} = \Delta^{L}$, where density ratios are estimated using logistic regression or set to their true values, respectively. In this experiment, the number of source domains is fixed at $L = 3$, with per-source sample sizes varied over $n_l \in \{100, 300, 500, 1000\}$ and the unlabeled target sample size fixed at $N = 20,000$. The top panel displays the error $\|\widehat{\boldsymbol{q}} - \boldsymbol{q}^{*}\|_2$ between the estimated aggregation weight and the true aggregation weight at the population level. The bottom panel shows the error $\|\widehat{f} - f^{*}\|_{\ell_2(\mathbf{Q})}$ between the estimated model and the true DRoL model.}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Analysis of Bias Correction Results}
+    \begin{itemize}
+        \item Figure 6 summarizes results over 200 simulation runs.
+        \item \textbf{Top panel}: Error $\|\widehat{\boldsymbol{q}} - \boldsymbol{q}^{*}\|_2$ (aggregation weight accuracy).
+        \item \textbf{Bottom panel}: Error $\|\widehat{f} - f^{*}\|_{\ell_2(\mathbf{Q})}$ (model estimation error).
+        \item \textbf{Key findings}:
+        \begin{itemize}
+            \item The bias-corrected method \textbf{Logistic} outperforms \textbf{PlugIn} in both aggregation weight accuracy and model estimation error.
+            \item Improvements become more pronounced as the source sample size increases.
+            \item The \textbf{Oracle} method, using true density ratios, achieves the best performance.
+            \item Our \textbf{Logistic} method is comparable to the Oracle.
+        \end{itemize}
+        \item Conclusion: Bias correction is effective and necessary for accurate estimation.
+    \end{itemize}
+\end{frame}
+
+\section{Real Data.}
+
+\begin{frame}{Real Data: Beijing PM2.5 Air Pollution Dataset}
+    \begin{itemize}
+        \item We evaluate DRoL using the Beijing PM2.5 Air Pollution dataset, initially analyzed in \cite{69}.
+        \item Contains PM2.5 concentration measurements (2013–2016) from 12 nationally controlled air-quality monitoring sites in Beijing.
+        \item Includes meteorological covariates: temperature, pressure, dew point, precipitation, wind direction, wind speed.
+        \item Motivation:
+        \begin{itemize}
+            \item Direct PM2.5 measurement is resource-intensive and requires specialized equipment.
+            \item Meteorological covariates are widely accessible and exhibit strong associations with PM2.5 levels \cite{57,69,67,13}.
+            \item Useful for predicting PM2.5 with meteorological covariates.
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Domain Adaptation Challenge in PM2.5 Prediction}
+    \begin{itemize}
+        \item The relationship between meteorological variables and PM2.5 may vary significantly across districts due to localized environmental factors (e.g., urbanization, industrial activity).
+        \item Models trained solely on data from monitoring sites fail to generalize to districts with distinct meteorological patterns.
+        \item Constructing models that generalize well across Beijing is critical for:
+        \begin{itemize}
+            \item Providing early warnings to citizens.
+            \item Informing regulatory actions to mitigate air pollution.
+        \end{itemize}
+        \item This challenge aligns naturally with the Multi-source Unsupervised Domain Adaptation (MSDA) framework.
+        \begin{itemize}
+            \item \textbf{Labeled source domains}: Air monitoring sites (with paired PM2.5 and meteorological data).
+            \item \textbf{Unlabeled target domains}: Districts where only meteorological measurements are available.
+        \end{itemize}
+        \item Goal: Leverage labeled source data and unlabeled target covariates to build robust models that generalize well, considering distribution shifts caused by spatial heterogeneity.
+    \end{itemize}
+\end{frame}
+\begin{frame}{Experimental Setup: Air Quality Monitoring}
+    \begin{itemize}
+        \item In this study, we select $L = 5$ representative air monitoring sites to serve as the source domains, namely: Aotizhongxin (eastern traffic corridor), Dongsi (central urban), Tiantan (southern cultural hub), Guanyuan (northwestern urban), and Wanliu (northwestern residential), and they represent a diverse cross-section of Beijing’s official air quality monitoring network.
+        \item The remaining seven monitoring sites are used as target domains to evaluate the proposed approach.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Experimental Setup: Evaluation Protocol}
+    \begin{itemize}
+        \item For each year $\in \{ 2013, ... 2016 \}$ and for each season (denoted as SP for Spring, SU for Summer, AU for Autumn, and WI for Winter), we develop predictive models based on the five source domains ($L = 5$) and evaluate their performance using the worst-case reward (i.e., the minimum reward) across the seven target sites.
+        \item Consistent with the experiments described in Section 5.1, we compare our proposed DRoL method (implemented via Algorithm 1 with the default constraint $\bar{\mathcal{H}} = \Delta^{L}$) against ERM, ImpWeight, and GroupDRO that have been described in Section 5.1.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Worst-Case Reward Comparison}
+    \begin{figure}[htpb]
+        \begin{center}
+            \includegraphics[width=0.8\linewidth]{images/257384a978b5a1d9dd274485f2e53e011d06d59dd5746a85ca6223bd3937fedb.jpg}
+        \end{center}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Worst-Case Reward Comparison (Data)}
+    \begin{table}[h]
+        \centering
+        \begin{tabular}{c|c|c|c|c}
+            \textbf{Period} & \textbf{DROL} & \textbf{ERM} & \textbf{ImpWeight} & \textbf{GroupDRO} \\
+            \hline
+            13-SP  & 0.37  & 0.26  & 0.29      & 0.35     \\
+            14-SP  & 0.31  & 0.15  & 0.24      & 0.28     \\
+            15-SP  & 0.31  & 0.22  & 0.24      & 0.27     \\
+            16-SP  & 0.37  & 0.22  & 0.24      & 0.27     \\
+            13-SU  & 0.21  & 0.10  & 0.15      & 0.15     \\
+            14-SU  & 0.40  & 0.32  & 0.35      & 0.15     \\
+            15-SU  & 0.34  & 0.28  & 0.30      & 0.31     \\
+            16-SU  & 0.27  & 0.15  & 0.13      & 0.21     \\
+            13-AU  & 0.29  & 0.20  & 0.22      & 0.23     \\
+            14-AU  & 0.33  & 0.21  & 0.24      & 0.27     \\
+            15-AU  & 0.10  & 0.07  & 0.02      & 0.15     \\
+            16-AU  & 0.38  & 0.29  & 0.28      & 0.30     \\
+            13-WI  & 0.48  & 0.31  & 0.31      & 0.40     \\
+            14-WI  & 0.48  & 0.29  & 0.28      & 0.45     \\
+            15-WI  & 0.43  & 0.38  & 0.38      & 0.47     \\
+            16-WI  & 0.42  & 0.27  & 0.27      & 0.41     \\
+        \end{tabular}
+    \end{table}
+\end{frame}
+
+\begin{frame}{Worst-Case Reward Comparison (Analysis)}
+    \begin{itemize}
+        \item \textbf{FIG 7.} Comparison of methods in terms of the worst-case reward evaluated over seven target domains across seasons and years. The DRoL method is implemented by Algorithm 1 (using default $\mathcal{H} = \Delta^{L}$). The descriptions of methods ERM, ImpWeight, and GroupDRO are provided in Section 5.1.
+        \item Figure 7 summarizes the results for each year and season. Our proposed DRoL method achieves the highest worst-case reward across all years and seasons, with the only exception of Winter 2015, where its performance is slightly lower than that of GroupDRO.
+        \item While GroupDRO also yields a robust prediction model, the usage of unlabeled target data in the proposed DRoL is tailored to each specific target domain using covariate information, which explains its superior performance.
+        \item Finally, methods like ImpWeight and ERM, which do not account for potential conditional outcome distribution shifts across source and target domains, deliver the poorest performance in most cases for this application. Although ImpWeight makes use of unlabeled target data, its benefits are limited compared to our approach.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Interpretability of Aggregation Weights}
+    \begin{itemize}
+        \item Moreover, the aggregation weights produced by the proposed DRoL method naturally reflect the relative importance of each source domain for a given target domain.
+        \item For illustrative purposes, Figure 8 displays the aggregation weights computed for four target air-monitoring sites during Spring 2016, enabling a clear visualization of each source air-monitoring site’s contribution to building a robust prediction model for each target site.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Effect of Constraint Set Specification}
+    \begin{itemize}
+        \item Next, we investigate how different specifications of the constraint $\mathcal{H}$, which encodes prior information about the target distribution, affect the performance of our DRoL approach.
+        \item For DRoL-Label, we consider that 5\% of the target domain data is labeled (about 100 labeled samples in this real application), while the remaining 95\% of the target domain data is unlabeled. We set $\mathcal{H} = \{ \bar{q} \in \Delta^{L} \ | \ \Vert q - \widehat{q}^{\mathrm{label}} \Vert_{2} \leq \rho \}$, where $\widehat{q}^{\mathrm{label}}$ is the aggregation weight estimated using the limited labeled target data (as specified in (5.2)) and $\rho \in [0, 1]$ controls the size of $\mathcal{H}$.
+        \item For DRoL-Unif, we use a uniform prior by setting $\mathcal{H} = \left\{ q \in \Delta^{\bar{L}} \vert \vert \bar{q} - q^{\mathrm{unif}} \vert \vert_{2} \leq \rho \right\}$, with $q^{\mathrm{unif}} = (0.2, 0.2, 0.2, 0.2, 0.2, 0.2)^{\intercal}$.
+        \item In contrast, DRoL-Default adopts no prior information by setting $\mathcal{H} = \Delta^{L}$.
+        \item Additionally, we include the TargetOnly benchmark, which fits models solely using the small amount of labeled target data.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Aggregation Weights Visualization}
+    \begin{figure}[htpb]
+        \begin{center}
+            \includegraphics[width=0.8\linewidth]{images/389642c0ad6a1600a8646796a7d23538cd9abe1800e8e404b084ede946b35f18.jpg}
+        \end{center}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Aggregation Weights for Spring 2016 (Data)}
+    \begin{table}[h]
+        \centering
+        \begin{tabular}{c|c|c|c|c|c}
+            \textbf{Source Domains} & \textbf{Dongsi} & \textbf{Aotizhongxin} & \textbf{Guanyuan} & \textbf{Tiantan} & \textbf{Wanliu} \\
+            \hline
+            Nongzhanguan & 0.03 & 0.09 & 0.00 & 0.12 & 0.78 \\
+            Gucheng & 0.00 & 0.23 & 0.26 & 0.22 & 0.38 \\
+            Dingling & 0.11 & 0.00 & 0.30 & 0.17 & 0.41 \\
+            Huairou & 0.21 & 0.00 & 0.36 & 0.06 & 0.39 \\
+        \end{tabular}
+    \end{table}
+    \begin{itemize}
+        \item \textbf{FIG 8.} Aggregation weights for four target air-monitoring sites (Nongzhuanguan, Gucheng, Dingling, Huairou) in Spring 2016. The weights are computed by Algorithm 1 using the default constraint set $\mathcal{H} = \Delta^{L}$.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Reward on Site Nongzhanguan in Summers}
+    \begin{figure}[htpb]
+        \begin{center}
+            \includegraphics[width=0.8\linewidth]{images/d5c8dc2851ee64081127ae7c8d103c9dd7331ffca9abc52879b6ad665fa7bf3f.jpg}
+        \end{center}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Reward on Site Nongzhanguan in Summers (Analysis)}
+    \begin{itemize}
+        \item \textbf{FIG 9.} Comparison of different methods in terms of the reward evaluated on the target air-monitoring site Nongzhanguan during the summer season. In each simulation, the models are trained using a randomly selected 90\% subsample of the original dataset. The plotted curves are the mean rewards computed over 200 subsampled data sets, and the shaded error bands represent the 10th and 90th percentiles of the rewards across 200 subsampled data sets.
+        \item DRoL-Label, DRoL-Unif, DRoL-Default are implemented via Algorithm 1 with different specifications of the constraint set $\mathcal{H}$.
+        \item DRoL-Label sets $\mathcal{H} = \{ q \in \Delta^{L} \mid \| q - \widehat{q}^{\mathrm{label}} \|_{2} \leq \rho \}$, where $\widehat{q}^{\mathrm{label}}$ is the aggregation weight fitted from a small set of labeled target data (5\% of the target dataset), as described in (5.2).
+        \item DRoL-Unif sets $\mathcal{H} = \{ q \in \Delta^{L} \ | \ \Vert q - q^{\mathrm{unif}} \Vert_{2} \leq \rho \}$ with a uniform weight vector $q^{\mathrm{unif}}$.
+        \item DRoL-Default uses the default $\mathcal{H} = \Delta^{L}$, i.e., no prior information.
+        \item TargetOnly fits models using the limited labeled data from the target air-monitoring site.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Analysis of Constraint Set Effects}
+    \begin{itemize}
+        \item Figure 9 illustrates the comparison using data from the target air-monitoring site Nongzhanguan during the summer season.
+        \item When comparing DRoL-Label (which leverages prior information estimated from the limited labeled target data) with DRoL-Default (which does not use any prior information), it is clear that accurately specified prior information can enhance the predictive performance of DRoL.
+        \item Moreover, DRoL-Unif constrains the solution around the uniform vector $q^{\mathrm{unif}} = (0.2, 0.2, 0.2, 0.2, 0.2, 0.2)^{\intercal}$, failing to capture the target domain’s characteristics. As a result, it may perform better or worse than DRoL-Unif in different years.
+        \item Finally, the TargetOnly benchmark, which fits a model solely on the limited labeled target data, performs the worst among these methods and fails to deliver a reliable prediction for the target domain.
+        \item These findings highlight DRoL’s ability to integrate prior information, which can improve its predictive performance on a specific target domain when the prior information captures the true target distribution.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Acknowledgments}
+    \begin{itemize}
+        \item The authors extend their gratitude to Koulik Khamaru for the valuable discussions on the NP-hardness of the regret-based approach.
+        \item The research of Z. Wang and Z. Guo was partly supported by the NSF DMS 2015373 and NIH R01GM140463 and R01LM013614; Z.Guo also acknowledges financial support for visiting the Institute of Mathematical Research (FIM) at ETH Zurich.
+        \item P. Bühlmann received funding from the European Research Council (ERC) under the European Union’s Horizon 2020 research and innovation program (grant agreement No. 786461).
+    \end{itemize}
+\end{frame}
+\begin{frame}
+    \frametitle{Thank You}
+    \framesubtitle{Questions \& Discussion}
+    \begin{center}
+        \vspace{1cm}
+        {\Huge \textbf{Thank You}} \\
+        \vspace{1.5cm}
+        {\LARGE \textbf{Questions?}} \\
+        \vspace{0.5cm}
+        {\large \textit{Contact Information:}} \\
+        \vspace{0.2cm}
+        \texttt{author@institution.edu} \\
+        \vspace{1cm}
+        \includegraphics[height=1.5cm]{example-image} % Replace with actual logo if needed
+    \end{center}
+\end{frame}
+\end{document}

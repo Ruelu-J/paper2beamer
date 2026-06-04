@@ -54,7 +54,6 @@ class MinerUCliExtractor(BaseExtractor):
         return self._collect_output(output_dir, pdf_hash)
 
     def _collect_output(self, output_dir: Path, pdf_hash: str) -> ExtractResult:
-        # MinerU creates a subdirectory named after the PDF file
         actual_dir = output_dir
         for d in sorted(output_dir.iterdir(), key=lambda x: x.name):
             if d.is_dir() and d.name != "images":
@@ -136,7 +135,7 @@ class LocalMinerUExtractor(BaseExtractor):
 
 
 class CloudMinerUExtractor(BaseExtractor):
-    """Uses the mineru-open-sdk to call the MinerU cloud API."""
+    """Uses the mineru-open-sdk to call the MinerU cloud API (token-based)."""
 
     def __init__(self, api_key: str = ""):
         self.api_key = api_key
@@ -156,18 +155,38 @@ class CloudMinerUExtractor(BaseExtractor):
         pdf_hash = hash_pdf(pdf_path)
 
         client = MinerU(self.api_key) if self.api_key else MinerU()
+
+        # Use token-based extract (not flash_extract) for reliable results
         result = await asyncio.to_thread(
-            client.flash_extract, str(pdf_path)
+            client.extract,
+            str(pdf_path),
+            formula=True,
+            table=True,
+            timeout=600,
         )
 
-        md_path = output_dir / "output.md"
-        result.save_markdown(str(md_path))
+        if result.state != "done":
+            error_msg = result.error or f"state={result.state}"
+            raise RuntimeError(
+                f"MinerU cloud extraction failed: {error_msg}. "
+                f"err_code={result.err_code}"
+            )
 
-        markdown = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
+        if not result.markdown:
+            raise RuntimeError(
+                "MinerU cloud extraction returned no markdown content."
+            )
+
+        md_path = output_dir / "output.md"
+        result.save_markdown(str(md_path), with_images=True)
+
+        images_dir = output_dir / "images"
+        if not images_dir.exists():
+            images_dir = output_dir
 
         return ExtractResult(
-            markdown=markdown,
-            images_dir=str(output_dir),
+            markdown=result.markdown,
+            images_dir=str(images_dir),
             json_path="",
             pdf_hash=pdf_hash,
         )

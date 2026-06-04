@@ -33,6 +33,7 @@ class Block:
     column_align: list[str] | None = None
     heading_level: int = 0
     lines: list[str] = field(default_factory=list)
+    is_latex: bool = False  # True when content already contains LaTeX commands (e.g., from LLM)
 
 
 @dataclass

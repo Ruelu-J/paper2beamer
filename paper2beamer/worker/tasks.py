@@ -14,10 +14,9 @@ from paper2beamer.core.parser import MarkdownParser
 from paper2beamer.core.converter import BeamerConverter
 from paper2beamer.core.splitter import FrameSplitter
 from paper2beamer.core.compiler import LatexCompiler
-from paper2beamer.core.citations import CitationDetector
 from paper2beamer.cache.manager import CacheManager
 from paper2beamer.db.models import Job, JobStatus
-from paper2beamer.utils.file_utils import create_zip, collect_directory_files
+from paper2beamer.utils.file_utils import create_zip, collect_directory_files, collect_directory_recursive
 
 
 async def process_job(
@@ -53,8 +52,6 @@ async def process_job(
                 engine=settings.tex_engine,
                 timeout=settings.latex_timeout,
             )
-            citation_detector = CitationDetector()
-
             output_mode = OutputMode(mode)
             output_dir = Path(settings.output_dir) / job_id
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -82,11 +79,8 @@ async def process_job(
                 extract_result.markdown, extract_result.images_dir
             )
 
-            # Step 3: Citations
-            citations, bib_text = citation_detector.extract(document)
-
-            # Step 4: Convert Document → Beamer LaTeX
-            await _update_job(session, job, JobStatus.CONVERTING, 60)
+            # Step 3: Resolve template directory
+            await _update_job(session, job, JobStatus.CONVERTING, 40)
             template_dir = ""
             if template_id:
                 template_dir = str(
@@ -97,51 +91,104 @@ async def process_job(
                     Path(__file__).parent.parent.parent / "templates" / "default"
                 )
 
-            beamer_tex = converter.convert(document, template_dir, output_mode)
+            # Step 5: Convert Document → Beamer LaTeX
+            # Use LLM converter when API key is available (template-aware generation)
+            await _update_job(session, job, JobStatus.CONVERTING, 60)
+            from paper2beamer.core.llm_converter import LLMBeamerConverter
+            llm_converter = LLMBeamerConverter()
+            if llm_converter.enabled:
+                beamer_tex = await llm_converter.convert(
+                    document, Path(template_dir), output_mode
+                )
+            else:
+                beamer_tex = converter.convert(document, template_dir, output_mode)
 
-            # Step 5: Split frames
-            beamer_tex = splitter.split(beamer_tex)
+            # Step 6: Split frames (skip for LLM output — already well-structured)
+            if not llm_converter.enabled:
+                beamer_tex = splitter.split(beamer_tex)
 
             # Step 6: Compile LaTeX → PDF
+            # When the LLM converter is enabled we run compile-and-fix:
+            # LaTeX errors are sent back to the LLM (no human intervention)
+            # and the regenerated frames are retried until it compiles or
+            # the attempt budget is exhausted.
             await _update_job(session, job, JobStatus.COMPILING, 80)
-            pdf_bytes, log_text = await compiler.compile(
-                tex_content=beamer_tex,
-                output_dir=str(output_dir),
-                template_dirs=[template_dir],
-                images_dir=extract_result.images_dir,
-                bib_content=bib_text if output_mode == OutputMode.FULL else "",
-            )
 
-            if not pdf_bytes:
-                raise RuntimeError(
-                    f"LaTeX compilation produced no PDF.\n\n{log_text}"
+            async def _compile_once(tex: str) -> tuple[bytes, str]:
+                return await compiler.compile(
+                    tex_content=tex,
+                    output_dir=str(output_dir),
+                    template_dirs=[template_dir],
+                    images_dir=extract_result.images_dir,
                 )
+
+            if llm_converter.enabled:
+                # Read the template body again so the LLM repair prompt has
+                # styling context. Cheap — already on disk.
+                _, template_body, _ = llm_converter._read_template(
+                    Path(template_dir)
+                )
+                beamer_tex, pdf_bytes, log_text = \
+                    await llm_converter.compile_and_fix(
+                        beamer_tex,
+                        _compile_once,
+                        template_body,
+                        max_attempts=settings.llm_fix_attempts,
+                    )
+            else:
+                pdf_bytes, log_text = await _compile_once(beamer_tex)
+
+            pdf_skipped = False
+            if not pdf_bytes:
+                # Always persist .tex + log so the user (or a downstream
+                # developer) can inspect what was generated and why
+                # compilation failed — even when we ultimately raise.
+                try:
+                    (output_dir / "main.tex").write_text(
+                        beamer_tex, encoding="utf-8"
+                    )
+                    (output_dir / "build.log").write_text(
+                        log_text, encoding="utf-8", errors="replace"
+                    )
+                except OSError:
+                    pass
+                # If latexmk is not installed, still package .tex without .pdf
+                if "not found" in log_text or "找不到" in log_text:
+                    pdf_skipped = True
+                else:
+                    raise RuntimeError(
+                        f"LaTeX compilation failed after "
+                        f"{settings.llm_fix_attempts if llm_converter.enabled else 1} "
+                        f"attempt(s). See {output_dir}/main.tex and "
+                        f"{output_dir}/build.log.\n\n{log_text[-2000:]}"
+                    )
 
             # Step 7: Package output ZIP
             await _update_job(session, job, JobStatus.COMPILING, 90)
-            tex_path = output_dir / "presentation.tex"
+            tex_path = output_dir / "main.tex"
             pdf_path_out = output_dir / "presentation.pdf"
-            bib_path = output_dir / "references.bib"
             zip_path = output_dir / "presentation.zip"
 
             tex_path.write_text(beamer_tex, encoding="utf-8")
-            pdf_path_out.write_bytes(pdf_bytes)
-            if bib_text:
-                bib_path.write_text(bib_text, encoding="utf-8")
+            if pdf_bytes:
+                pdf_path_out.write_bytes(pdf_bytes)
 
             zip_files: dict[str, str | bytes] = {
-                "presentation.tex": beamer_tex,
-                "presentation.pdf": pdf_bytes,
+                "main.tex": beamer_tex,
                 "build.log": log_text,
-                "README.txt": _build_readme(document, output_mode),
+                "README.txt": _build_readme(document, output_mode, pdf_skipped),
             }
-            if bib_text:
-                zip_files["references.bib"] = bib_text
+            if pdf_bytes:
+                zip_files["presentation.pdf"] = pdf_bytes
 
             img_files = collect_directory_files(
                 extract_result.images_dir, prefix="images/"
             )
             zip_files.update(img_files)
+            tpl_files = collect_directory_recursive(
+                template_dir, prefix="", exclude_names={"main.tex"}
+            )
+            zip_files.update(tpl_files)
 
             create_zip(zip_path, zip_files)
 
@@ -150,8 +197,7 @@ async def process_job(
             job.progress_percent = 100
             job.output_zip_path = str(zip_path)
             job.output_tex_path = str(tex_path)
-            job.output_pdf_path = str(pdf_path_out)
-            job.output_bib_path = str(bib_path) if bib_text else None
+            job.output_pdf_path = str(pdf_path_out) if pdf_bytes else None
             job.log_text = log_text
             job.completed_at = datetime.datetime.utcnow()
             await session.commit()
@@ -170,18 +216,26 @@ async def _update_job(session: AsyncSession, job: Job, status: JobStatus,
     await session.commit()
 
 
-def _build_readme(document, output_mode: OutputMode) -> str:
-    return (
-        f"Beamer presentation generated by paper2beamer\n"
-        f"==============================================\n\n"
-        f"Paper: {document.title}\n"
-        f"Mode: {output_mode.value}\n"
-        f"Sections: {len(document.sections)}\n"
-        f"Citations detected: {len(document.citations)}\n\n"
-        f"Files:\n"
-        f"  - presentation.tex  : Beamer LaTeX source\n"
-        f"  - presentation.pdf  : Compiled presentation\n"
-        f"  - references.bib    : Extracted bibliography\n"
-        f"  - build.log         : LaTeX compilation log\n"
-        f"  - images/           : Extracted figures\n"
-    )
+def _build_readme(document, output_mode: OutputMode, pdf_skipped: bool = False) -> str:
+    lines = [
+        f"Beamer presentation generated by paper2beamer",
+        f"==============================================\n",
+        f"Paper: {document.title}",
+        f"Mode: {output_mode.value}",
+        f"Sections: {len(document.sections)}\n",
+        f"Files:",
+        f"  - main.tex          : Beamer LaTeX source",
+    ]
+    if pdf_skipped:
+        lines.append(
+            f"  - presentation.pdf  : NOT GENERATED (latexmk not found)\n"
+            f"\nTo compile the PDF, install texlive + latexmk and run:\n"
+            f"  latexmk -pdf -pdflatex main.tex"
+        )
+    else:
+        lines.append(f"  - presentation.pdf  : Compiled presentation")
+    lines.extend([
+        f"  - build.log         : LaTeX compilation log",
+        f"  - images/           : Extracted figures",
+    ])
+    return "\n".join(lines)

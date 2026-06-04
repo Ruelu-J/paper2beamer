@@ -1,11 +1,11 @@
-"""Frame splitting - ensures Beamer content doesn't overflow slides."""
+"""Frame splitting — ensures Beamer content doesn't overflow slides."""
 
 import re
 from dataclasses import dataclass, field
 
-MAX_LINES_PER_FRAME = 28
-MAX_FORMULA_LINES = 20
-MAX_TABLE_ROWS = 15
+MAX_LINES_PER_FRAME = 22
+MAX_FORMULA_LINES = 16
+MAX_TABLE_ROWS = 12
 FRAME_TITLE_OVERHEAD = 2
 
 
@@ -105,55 +105,70 @@ class FrameSplitter:
             return [frame]
 
         content = "\n\n".join(frame.content_parts)
+
+        # Split at natural boundaries: paragraphs (double newlines)
         paragraphs = re.split(r'\n\s*\n', content)
+
+        # If only one paragraph, check if it's a special block type
+        if len(paragraphs) <= 1:
+            return self._handle_oversized_single(frame.title, content)
 
         result: list[FrameSpec] = []
         current = FrameSpec(title=frame.title)
-        continuation_count = 0
+        overflow: list[str] = []  # paragraphs that don't fit in current frame
 
         for para in paragraphs:
+            para = para.strip()
+            if not para:
+                continue
+
             para_lines = self._estimate_lines(para)
 
+            # If this paragraph alone overflows the max, it needs special handling
             if para_lines > self.max_lines:
+                # Flush current frame first
                 if current.content_parts:
                     result.append(current)
-                oversized = self._handle_oversized(frame.title, para, continuation_count)
+                    current = FrameSpec(title=frame.title)
+                # Handle the oversized paragraph separately
+                oversized = self._handle_oversized_single(frame.title, para)
                 result.extend(oversized)
-                continuation_count += len(oversized)
-                current = FrameSpec(title=frame.title)
-            elif current.estimated_lines + para_lines <= self.max_lines:
-                current.content_parts.append(para)
-                current.estimated_lines += para_lines
-            else:
+                continue
+
+            # If adding this paragraph would overflow, start a new frame
+            if current.estimated_lines + para_lines > self.max_lines:
                 result.append(current)
-                continuation_count += 1
-                cont_title = frame.title
-                if continuation_count > 1:
-                    cont_title += f" (cont. {continuation_count})"
                 current = FrameSpec(
-                    title=cont_title,
+                    title=frame.title,
                     content_parts=[para],
                     estimated_lines=FRAME_TITLE_OVERHEAD + para_lines,
                 )
+            else:
+                current.content_parts.append(para)
+                current.estimated_lines += para_lines
 
         if current.content_parts:
             result.append(current)
 
         return result
 
-    def _handle_oversized(
-        self, title: str, content: str, cont_count: int
+    def _handle_oversized_single(
+        self, title: str, content: str
     ) -> list[FrameSpec]:
+        """Handle content that exceeds one frame even as a single block."""
         if r"\begin{table}" in content:
-            return self._split_large_table(title, content, cont_count)
-        if r"\begin{equation" in content or "$$" in content:
-            return self._split_long_formula(title, content, cont_count)
+            return self._split_large_table(title, content)
+        if r"\begin{equation" in content or "$$" in content or r"\begin{align" in content:
+            return self._split_long_formula(title, content)
         if r"\includegraphics" in content:
             return [FrameSpec(
                 title=title,
                 content_parts=[content],
                 estimated_lines=self.max_lines,
             )]
+        if r"\begin{itemize}" in content or r"\begin{enumerate}" in content:
+            return self._split_long_list(title, content)
+        # For long paragraphs: use allowframebreaks as last resort
         return [FrameSpec(
             title=title,
             content_parts=[
@@ -164,8 +179,58 @@ class FrameSplitter:
             estimated_lines=0,
         )]
 
+    def _split_long_list(self, title: str, content: str) -> list[FrameSpec]:
+        """Split a long itemize/enumerate across frames."""
+        env_match = re.search(r'\\begin\{(itemize|enumerate)\}', content)
+        if not env_match:
+            return [FrameSpec(title=title, content_parts=[content],
+                              estimated_lines=self.max_lines)]
+        env_name = env_match.group(1)
+
+        # Extract individual items
+        items = re.findall(r'\\item\s+(.*?)(?=\\item\s+|\n*\\end\{' + env_name + r'\})',
+                           content, re.DOTALL)
+        if len(items) <= 1:
+            return [FrameSpec(title=title, content_parts=[content],
+                              estimated_lines=self.max_lines)]
+
+        frames: list[FrameSpec] = []
+        current_items: list[str] = []
+        current_lines = FRAME_TITLE_OVERHEAD + 2  # begin/end env
+
+        for item in items:
+            item_text = item.strip()
+            item_lines = item_text.count("\n") + 2  # \item + content
+            if current_lines + item_lines > self.max_lines and current_items:
+                frames.append(FrameSpec(
+                    title=title,
+                    content_parts=[
+                        rf"\begin{{{env_name}}}"
+                        + "\n" + "\n".join(current_items) + "\n"
+                        + rf"\end{{{env_name}}}"
+                    ],
+                    estimated_lines=current_lines,
+                ))
+                current_items = []
+                current_lines = FRAME_TITLE_OVERHEAD + 2
+            current_items.append(rf"\item {item_text}")
+            current_lines += item_lines
+
+        if current_items:
+            frames.append(FrameSpec(
+                title=title,
+                content_parts=[
+                    rf"\begin{{{env_name}}}"
+                    + "\n" + "\n".join(current_items) + "\n"
+                    + rf"\end{{{env_name}}}"
+                ],
+                estimated_lines=current_lines,
+            ))
+
+        return frames
+
     def _split_large_table(
-        self, title: str, content: str, cont_count: int
+        self, title: str, content: str
     ) -> list[FrameSpec]:
         rows = content.splitlines()
         if len(rows) <= 1:
@@ -205,8 +270,7 @@ class FrameSplitter:
             chunk = data_rows[chunk_start:chunk_start + chunk_size]
             chunk_title = title
             if chunk_start > 0:
-                chunk_title += f" (cont. {cont_count + 1})"
-                cont_count += 1
+                chunk_title += " (continued)"
 
             table_lines = [
                 r"\begin{table}",
@@ -230,7 +294,7 @@ class FrameSplitter:
         return frames
 
     def _split_long_formula(
-        self, title: str, content: str, cont_count: int
+        self, title: str, content: str
     ) -> list[FrameSpec]:
         if r"\begin{aligned}" in content or r"\begin{align" in content:
             body_match = re.search(
@@ -243,10 +307,8 @@ class FrameSplitter:
                 if len(lines) <= self.max_formula_lines:
                     return [FrameSpec(
                         title=title,
-                        content_parts=[
-                            rf"\resizebox{{\textwidth}}{{!}}{{\ensuremath{{{content}}}}}"
-                        ],
-                        estimated_lines=self.max_lines,
+                        content_parts=[content],
+                        estimated_lines=len(lines) + 4,
                     )]
 
                 env_match = re.search(
@@ -258,8 +320,7 @@ class FrameSplitter:
                     chunk = lines[chunk_start:chunk_start + self.max_formula_lines]
                     chunk_title = title
                     if chunk_start > 0:
-                        chunk_title += f" (cont. {cont_count + 1})"
-                        cont_count += 1
+                        chunk_title += " (continued)"
                     formula = (
                         rf"\begin{{{env_name}}}"
                         + r" \\ ".join(chunk)
@@ -274,9 +335,7 @@ class FrameSplitter:
 
         return [FrameSpec(
             title=title,
-            content_parts=[
-                rf"\resizebox{{\textwidth}}{{!}}{{\ensuremath{{{content}}}}}"
-            ],
+            content_parts=[content],
             estimated_lines=20,
         )]
 
@@ -300,12 +359,12 @@ class FrameSplitter:
             return 0
         if r"\begin{table}" in content:
             return content.count(r"\\") + 8
-        if r"\begin{equation" in content or "$$" in content:
-            return content.count("\n") + 2
+        if r"\begin{equation" in content or "$$" in content or r"\begin{align" in content:
+            return content.count("\n") + 3
         if r"\begin{itemize}" in content or r"\begin{enumerate}" in content:
             return content.count(r"\item") + 4
         if r"\includegraphics" in content:
-            return 15
+            return 16
         if r"\section{" in content or r"\subsection{" in content:
             return 3
         lines = content.count("\n") + 1

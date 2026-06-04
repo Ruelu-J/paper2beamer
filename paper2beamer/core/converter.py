@@ -32,7 +32,7 @@ class BeamerConverter:
             parts.append(r"\end{frame}")
             parts.append("")
             for section in document.sections:
-                parts.append(self._section_to_frames(section))
+                parts.append(self._section_to_beamer(section))
             parts.append(self._build_thanks_slide())
 
         parts.append("")
@@ -58,6 +58,8 @@ class BeamerConverter:
         if template_dir:
             template_path = Path(template_dir)
             sty_files = list(template_path.glob("beamertheme*.sty"))
+            if not sty_files:
+                sty_files = list(template_path.glob("*.sty"))
             if sty_files:
                 theme_name = sty_files[0].stem
                 if theme_name.startswith("beamertheme"):
@@ -78,6 +80,13 @@ class BeamerConverter:
             r"{",
             r"  \begin{frame}{Outline}",
             r"    \tableofcontents[currentsection]",
+            r"  \end{frame}",
+            r"}",
+            "",
+            r"\AtBeginSubsection[]",
+            r"{",
+            r"  \begin{frame}{Outline}",
+            r"    \tableofcontents[currentsection,currentsubsection]",
             r"  \end{frame}",
             r"}",
             "",
@@ -110,51 +119,138 @@ class BeamerConverter:
         )
         return "\n\n".join(frames)
 
-    def _section_to_frames(self, section: Section) -> str:
+    def _section_to_beamer(self, section: Section) -> str:
+        """Convert a section into Beamer with proper section/subsection commands."""
+        parts: list[str] = []
+
+        # Generate LaTeX section command
+        section_title = self._escape_latex(section.title)
+        if section.level == 1:
+            parts.append(rf"\section{{{section_title}}}")
+        else:
+            parts.append(rf"\subsection{{{section_title}}}")
+
+        # Convert blocks into frames
+        frames = self._blocks_to_frames(section.title, list(section.blocks))
+
+        if frames:
+            parts.append("\n\n".join(frames))
+
+        # Process subsections
+        for sub in section.subsections:
+            parts.append(self._section_to_beamer(sub))
+
+        return "\n\n".join(parts)
+
+    def _blocks_to_frames(self, section_title: str, blocks: list[Block]) -> list[str]:
+        """Convert blocks to a sequence of frames, respecting content boundaries."""
         frames: list[str] = []
+        current_frame: list[str] = []
+        current_title = self._escape_latex(section_title)
+        current_lines = 0
+        MAX_FRAME_LINES = 20  # Conservative: leave room for title, padding
 
-        section_cmd = "section" if section.level == 1 else "subsection"
-        frames.append(rf"\{section_cmd}{{{self._escape_latex(section.title)}}}")
+        def flush_frame(title: str, content: list[str]) -> str | None:
+            if not content:
+                return None
+            inner = "\n\n".join(content)
+            # If content already has \frametitle (from LLM), skip converter's title
+            has_frametitle = any(
+                c.strip().startswith(r"\frametitle{") for c in content
+            )
+            if has_frametitle:
+                title_line = ""
+            else:
+                title_line = rf"\frametitle{{{title}}}" if title else ""
+            parts: list[str] = [r"\begin{frame}"]
+            if title_line:
+                parts.append(f"  {title_line}")
+            parts.append(inner)
+            parts.append(r"\end{frame}")
+            return "\n".join(parts)
 
-        blocks = list(section.blocks)
-        frame_content: list[str] = []
-        frame_title = self._escape_latex(section.title)
+        def estimate_block_lines(block: Block) -> int:
+            """Estimate how many lines a block will take in Beamer."""
+            if block.type == BlockType.FIGURE:
+                return 18  # Figure takes most of the slide
+            elif block.type == BlockType.TABLE:
+                rows = len(block.lines) if block.lines else 5
+                return min(rows + 5, 20)
+            elif block.type == BlockType.FORMULA_DISPLAY:
+                return block.content.count("\n") + 4
+            elif block.type == BlockType.LIST_ITEM or block.type == BlockType.ENUM_ITEM:
+                return block.content.count("\n") + 3
+            elif block.type == BlockType.CODE_BLOCK:
+                return block.content.count("\n") + 3
+            elif block.type == BlockType.HEADING:
+                return 2
+            else:
+                # Paragraph: estimate from text length
+                text = block.content
+                chars_per_line = 80
+                raw_lines = text.count("\n") + 1
+                char_lines = max(1, len(text) // chars_per_line)
+                return max(raw_lines, char_lines) + 1
 
-        for i, block in enumerate(blocks):
-            if block.type == BlockType.HEADING and block.heading_level == 2:
-                if frame_content:
-                    frames.append(self._make_frame(frame_title, frame_content))
-                    frame_content = []
-                frame_title = self._escape_latex(block.content)
+        i = 0
+        while i < len(blocks):
+            block = blocks[i]
+
+            # Skip heading blocks (already handled as section titles)
+            if block.type == BlockType.HEADING:
+                i += 1
                 continue
 
-            frame_content.extend(self._block_to_latex(block))
+            block_lines = estimate_block_lines(block)
 
-        if frame_content:
-            frames.append(self._make_frame(frame_title, frame_content))
+            # Large blocks: figures and tables always get their own frame
+            if block.type in (BlockType.FIGURE, BlockType.TABLE):
+                if current_frame:
+                    f = flush_frame(current_title, current_frame)
+                    if f:
+                        frames.append(f)
+                    current_frame = []
+                    current_lines = 0
 
-        for sub in section.subsections:
-            frames.append(self._section_to_frames(sub))
+                frame_content = self._block_to_latex(block)
+                f_title = self._escape_latex(block.caption or section_title)
+                f = flush_frame(f_title, frame_content)
+                if f:
+                    frames.append(f)
+                i += 1
+                continue
 
-        return "\n\n".join(frames)
+            # If adding this block would overflow, start a new frame
+            if current_lines + block_lines > MAX_FRAME_LINES and current_frame:
+                f = flush_frame(current_title, current_frame)
+                if f:
+                    frames.append(f)
+                current_frame = []
+                current_lines = 0
+                # Use section title for continuation frames
+                current_title = self._escape_latex(section_title)
 
-    def _make_frame(self, title: str, content: list[str]) -> str:
-        inner = "\n\n".join(content)
-        title_cmd = rf"\frametitle{{{title}}}" if title else ""
-        return "\n".join([
-            r"\begin{frame}",
-            f"  {title_cmd}" if title_cmd else "",
-            inner,
-            r"\end{frame}",
-        ])
+            current_frame.extend(self._block_to_latex(block))
+            current_lines += block_lines
+            i += 1
+
+        # Flush remaining
+        if current_frame:
+            f = flush_frame(current_title, current_frame)
+            if f:
+                frames.append(f)
+
+        return frames
 
     def _block_to_latex(self, block: Block) -> list[str]:
         if block.type == BlockType.PARAGRAPH:
+            if block.is_latex:
+                return [block.content]  # LLM-generated, already proper LaTeX
             return [self._escape_latex(block.content)]
         elif block.type == BlockType.FORMULA_DISPLAY:
             return [block.content]
         elif block.type == BlockType.HEADING:
-            return []  # headings handled at section level
+            return []  # handled at section level
         elif block.type == BlockType.FIGURE:
             return self._figure_to_latex(block)
         elif block.type == BlockType.TABLE:
@@ -176,7 +272,7 @@ class BeamerConverter:
         return [
             r"\begin{figure}",
             r"\centering",
-            rf"\includegraphics[width=\textwidth,height=0.65\textheight,keepaspectratio]{{{filename}}}",
+            rf"\includegraphics[width=0.85\textwidth,height=0.55\textheight,keepaspectratio]{{{filename}}}",
             rf"\caption{{{caption}}}",
             r"\end{figure}",
         ]

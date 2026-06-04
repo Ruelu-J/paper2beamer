@@ -1,48 +1,174 @@
 {% extends "base.html.j2" %}
-{% block title %}Convert Paper{% endblock %}
-{% block content %}
-<section>
-    <h1>Convert Paper to Beamer</h1>
-    <p>Upload a PDF of your math/statistics paper and get a Beamer presentation.</p>
 
-    <form id="upload-form" action="/api/upload" method="post" enctype="multipart/form-data"
-          hx-post="/api/upload" hx-target="#result" hx-swap="innerHTML">
+{% block sidebar %}
+<div class="sidebar-header">
+    <a href="/" class="brand">paper2beamer</a>
+    <p class="brand-tagline">Convert academic PDFs to Beamer presentations</p>
+</div>
 
+<div class="sidebar-section">
+    <h3>MinerU API</h3>
+    <form hx-put="/api/settings" hx-target="#settings-save-status" hx-swap="innerHTML">
         <div class="form-group">
-            <label for="file">PDF Paper</label>
-            <input type="file" id="file" name="file" accept=".pdf" required>
-            <small>Maximum {{ max_upload_mb }}MB</small>
+            <label for="mineru_api_key">API Key</label>
+            <input type="password" id="mineru_api_key" name="mineru_api_key"
+                   placeholder="sk-xxxxxxxx" class="input-sm"
+                   value="{{ mineru_api_key or '' }}">
+            <small><a href="https://mineru.net/apiManage/token" target="_blank">Get free key at mineru.net</a></small>
         </div>
-
         <div class="form-group">
-            <label for="mode">Output Mode</label>
-            <select id="mode" name="mode">
-                <option value="full">Full Paper (all sections, figures, tables)</option>
-                <option value="abstract">Abstract Only</option>
+            <label for="mineru_mode">Mode</label>
+            <select id="mineru_mode" name="mineru_mode" class="input-sm">
+                <option value="local" {% if mineru_mode == 'local' %}selected{% endif %}>Local API</option>
+                <option value="cli" {% if mineru_mode == 'cli' %}selected{% endif %}>Local CLI</option>
+                <option value="cloud" {% if mineru_mode == 'cloud' %}selected{% endif %}>Cloud API</option>
             </select>
         </div>
-
-        <div class="form-group">
-            <label for="template_id">Beamer Template (optional)</label>
-            <select id="template_id" name="template_id">
-                <option value="">Default Theme</option>
-            </select>
-            <small><a href="/templates">Manage templates</a></small>
+        <div class="form-group" id="local-url-group" {% if mineru_mode == 'cloud' %}style="display:none"{% endif %}>
+            <label for="mineru_api_url">Local URL</label>
+            <input type="text" id="mineru_api_url" name="mineru_api_url"
+                   value="{{ mineru_api_url or 'http://localhost:8001' }}" class="input-sm">
         </div>
-
-        <button type="submit" class="btn-primary">Convert to Beamer</button>
+        <div class="form-group">
+            <label for="tex_engine">LaTeX Engine</label>
+            <select id="tex_engine" name="tex_engine" class="input-sm">
+                <option value="pdflatex" {% if tex_engine == 'pdflatex' %}selected{% endif %}>pdflatex</option>
+                <option value="xelatex" {% if tex_engine == 'xelatex' %}selected{% endif %}>xelatex</option>
+                <option value="lualatex" {% if tex_engine == 'lualatex' %}selected{% endif %}>lualatex</option>
+            </select>
+        </div>
+        <button type="submit" class="btn-save">Save Settings</button>
     </form>
+    <div id="settings-save-status" class="save-status"></div>
+</div>
 
-    <div id="result" class="result-area">
-        <div class="info-box">
-            <strong>How it works:</strong>
-            <ol>
-                <li>Upload your PDF paper</li>
-                <li>We extract content using MinerU (formulas, tables, figures)</li>
-                <li>Content is converted to a Beamer presentation</li>
-                <li>Download the ZIP with .tex, .pdf, .bib, and images</li>
-            </ol>
+<div class="sidebar-section">
+    <h3>LLM Enhancement (optional)</h3>
+    <form hx-put="/api/settings" hx-target="#llm-save-status" hx-swap="innerHTML">
+        <div class="form-group">
+            <label for="llm_api_key">LLM API Key</label>
+            <input type="password" id="llm_api_key" name="llm_api_key"
+                   placeholder="sk-xxxxxxxx" class="input-sm"
+                   value="{{ llm_api_key or '' }}">
         </div>
+        <div class="form-group">
+            <label for="llm_base_url">API Base URL</label>
+            <input type="text" id="llm_base_url" name="llm_base_url"
+                   value="{{ llm_base_url or 'https://api.openai.com/v1' }}" class="input-sm">
+        </div>
+        <div class="form-group">
+            <label for="llm_model">Model</label>
+            <select id="llm_model" name="llm_model" class="input-sm">
+                <option value="deepseek-ai/DeepSeek-V3.2" {% if llm_model == 'deepseek-ai/DeepSeek-V3.2' %}selected{% endif %}>DeepSeek V3.2</option>
+                <option value="deepseek-ai/DeepSeek-V3" {% if llm_model == 'deepseek-ai/DeepSeek-V3' %}selected{% endif %}>DeepSeek V3</option>
+                <option value="deepseek-ai/DeepSeek-R1" {% if llm_model == 'deepseek-ai/DeepSeek-R1' %}selected{% endif %}>DeepSeek R1</option>
+                <option value="Qwen/Qwen3-235B-A22B-Instruct-2507" {% if llm_model == 'Qwen/Qwen3-235B-A22B-Instruct-2507' %}selected{% endif %}>Qwen3 235B</option>
+                <option value="Qwen/Qwen2.5-72B-Instruct" {% if llm_model == 'Qwen/Qwen2.5-72B-Instruct' %}selected{% endif %}>Qwen 2.5 72B</option>
+                <option value="moonshotai/Kimi-K2-Instruct-0905" {% if llm_model == 'moonshotai/Kimi-K2-Instruct-0905' %}selected{% endif %}>Kimi K2</option>
+                <option value="gpt-4o" {% if llm_model == 'gpt-4o' %}selected{% endif %}>GPT-4o</option>
+                <option value="claude-3-5-sonnet-20241022" {% if llm_model == 'claude-3-5-sonnet-20241022' %}selected{% endif %}>Claude 3.5 Sonnet</option>
+            </select>
+            <small>LLM enhances slide titles and summarizes content for better readability</small>
+        </div>
+        <button type="submit" class="btn-save">Save LLM Settings</button>
+    </form>
+    <div id="llm-save-status" class="save-status"></div>
+</div>
+
+<div class="sidebar-section">
+    <h3>Output Mode</h3>
+    <div class="mode-tabs" id="mode-selector">
+        <button class="mode-tab active" data-mode="full"
+                hx-post="/api/settings/mode" hx-vals='{"output_mode":"full"}'
+                hx-target="#mode-save-status" hx-swap="innerHTML">
+            Full Paper
+        </button>
+        <button class="mode-tab" data-mode="abstract"
+                hx-post="/api/settings/mode" hx-vals='{"output_mode":"abstract"}'
+                hx-target="#mode-save-status" hx-swap="innerHTML">
+            Abstract Only
+        </button>
     </div>
-</section>
+    <small style="display:block;margin-top:0.25rem;">Full: all sections, figures, tables, + separate .bib</small>
+    <div id="mode-save-status" class="save-status"></div>
+</div>
+
+<div class="sidebar-section">
+    <h3>Template</h3>
+    <select id="template_id" name="template_id" class="input-sm" form="upload-form">
+        <option value="">Default Theme</option>
+        {% for tpl in templates %}
+        <option value="{{ tpl.id }}">{{ tpl.name }}</option>
+        {% endfor %}
+    </select>
+    <details class="upload-tpl-details">
+        <summary>Install new template</summary>
+        <form action="/api/templates/upload/web" method="post" enctype="multipart/form-data"
+              style="margin-top:0.5rem;">
+            <div class="form-group">
+                <input type="file" name="file" accept=".zip" required class="input-sm">
+            </div>
+            <div class="form-group">
+                <input type="text" name="name" placeholder="Template name" required class="input-sm">
+            </div>
+            <button type="submit" class="btn-save" style="width:100%;">Install</button>
+        </form>
+    </details>
+</div>
+
+<div class="sidebar-footer">
+    <a href="https://github.com" target="_blank">GitHub</a>
+    <span style="color:#999;">v0.1.0</span>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="main-header">
+    <h1>Paper to Beamer</h1>
+    <p>Upload a math/statistics paper PDF and get a Beamer presentation ZIP.</p>
+</div>
+
+<div class="upload-zone" id="upload-zone">
+    <form id="upload-form"
+          hx-post="/api/upload"
+          hx-encoding="multipart/form-data"
+          enctype="multipart/form-data"
+          hx-target="#result-area"
+          hx-swap="innerHTML"
+          hx-indicator="#upload-spinner">
+        <input type="hidden" name="mode" id="form-mode" value="full">
+        <div class="upload-drop-area">
+            <div class="upload-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#0066cc" stroke-width="1.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="12" y1="18" x2="12" y2="12"/>
+                    <polyline points="9 15 12 18 15 15"/>
+                </svg>
+            </div>
+            <p class="upload-text">Drag & drop a PDF here or click to browse</p>
+            <input type="file" id="file" name="file" accept=".pdf" required
+                   class="file-input">
+            <small>Maximum {{ max_upload_mb }}MB. Supported: math/statistics papers.</small>
+        </div>
+        <div style="text-align:center;margin-top:1rem;">
+            <button type="submit" class="btn-convert">Convert to Beamer</button>
+        </div>
+    </form>
+    <div id="upload-spinner" class="htmx-indicator" style="text-align:center;padding:1rem;">
+        <div class="spinner-icon"></div>
+        <p>Uploading PDF...</p>
+    </div>
+</div>
+
+<div id="result-area">
+    <div class="info-box">
+        <strong>Pipeline:</strong>
+        PDF &rarr; MinerU (extract) &rarr; Parse &rarr; Beamer LaTeX &rarr; Split Frames &rarr; Compile PDF &rarr; Download ZIP
+    </div>
+</div>
+
+<div id="job-history" class="job-history"
+     hx-get="/api/jobs/recent" hx-trigger="load" hx-swap="innerHTML">
+</div>
 {% endblock %}

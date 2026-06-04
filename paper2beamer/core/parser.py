@@ -86,6 +86,9 @@ class MarkdownParser:
         authors = [re.sub(r'\s+', ' ', a).strip() for a in authors]
         return i + 1, authors
 
+    # Pattern: line starting with a section number like "1. " or "2.1. "
+    _SECTION_NUMBER_RE = re.compile(r'^\d+(?:\.\d+)*\.?\s+[A-Z]')
+
     def _parse_abstract(self, lines: list[str], i: int) -> tuple[int, str]:
         while i < len(lines) and lines[i] == "":
             i += 1
@@ -99,6 +102,9 @@ class MarkdownParser:
                     line = lines[i]
                     if re.match(r"^#{1,6}\s", line):
                         break
+                    # Stop if a numbered section heading starts (MinerU style)
+                    if self._SECTION_NUMBER_RE.match(line):
+                        break
                     if line == "" and abstract_lines and abstract_lines[-1] == "":
                         i += 1
                         continue
@@ -106,11 +112,15 @@ class MarkdownParser:
                     i += 1
                 return i, " ".join(abstract_lines).strip()
 
-        # No explicit abstract heading — collect text before first section
+        # No explicit abstract heading — collect text before first section.
+        # Stop at a markdown heading OR a numbered section heading.
         abstract_lines: list[str] = []
         while i < len(lines):
             line = lines[i]
             if re.match(r"^#{1,6}\s", line):
+                break
+            # Stop at numbered section heading (MinerU doesn't add # prefix)
+            if self._SECTION_NUMBER_RE.match(line):
                 break
             if line == "" and abstract_lines and abstract_lines[-1] == "":
                 i += 1
@@ -151,10 +161,107 @@ class MarkdownParser:
             block = self._classify_block(text)
             current_blocks.append(block)
 
+        # Pre-compile numeric heading pattern used inside the loop.
+        # MinerU often emits section headings as plain-text lines with a
+        # numeric prefix rather than Markdown # headers.  The body text
+        # may be merged onto the same line, so we accept any length.
+        # Match: "1. Title...", "2.1. Title...", at line start.
+        _NUM_HEADING = re.compile(
+            r'^(\d+(?:\.\d+)*\.?)\s+(.+)$'
+        )
+        # Heading extraction: MinerU sometimes merges "1. Title. First
+        # sentence of body." into one long line. We split at the first
+        # sentence boundary after the numeric prefix + short title words.
+        # Strategy: collect words until we hit a ". Uppercase" boundary
+        # that suggests body prose started, capping at 12 words / 120 chars.
+        def _split_heading_body(prefix: str, rest: str) -> tuple[str, str]:
+            """Return (heading_text, leftover_body_text).
+            heading_text = prefix + title words (≤ 12 words or ≤ 120 chars).
+            leftover_body_text = the rest (may be empty).
+            """
+            words = rest.split()
+            # Find where the title ends: first ". " followed by uppercase
+            # or numeric word, within the first 12 words.
+            title_words: list[str] = []
+            leftover_start = 0
+            for idx, w in enumerate(words[:14]):
+                title_words.append(w)
+                leftover_start = idx + 1
+                joined = ' '.join(title_words)
+                # Title ends at a period that is not inside math
+                if (joined.endswith('.') and idx >= 0):
+                    # Next word starts with uppercase → body started
+                    nxt = words[leftover_start] if leftover_start < len(words) else ''
+                    if nxt and (nxt[0].isupper() or nxt[0].isdigit()):
+                        break
+                # Hard cap: > 120 chars or > 12 words → rest is body
+                if len(joined) > 120 or idx >= 11:
+                    # Don't split in the middle — take what we have as title
+                    leftover_start = idx + 1
+                    break
+            heading_text = prefix + ' ' + ' '.join(title_words)
+            body_text = ' '.join(words[leftover_start:])
+            return heading_text.strip(), body_text.strip()
+
+        # Heuristics to reject false positives (formula lines, prose, etc.)
+        def _is_numeric_heading(line: str) -> tuple[str, str] | None:
+            """Return (heading_text, leftover_body) or None."""
+            m = _NUM_HEADING.match(line)
+            if not m:
+                return None
+            prefix, rest = m.group(1), m.group(2)
+            # Must start with a digit (not a lone letter like "A.")
+            if not prefix[0].isdigit():
+                return None
+            # Rest must not look like a formula (starts with $, \, etc.)
+            if rest.startswith(('$', '\\', '{')):
+                return None
+            # Rest must start with an uppercase letter (section titles do)
+            if not rest[0].isupper():
+                return None
+            # The title must have at least one real word
+            if not rest.split():
+                return None
+            return _split_heading_body(prefix, rest)
+
         while i < len(lines):
             line = lines[i]
 
             heading_match = re.match(r"^(#{1,6})\s+(.+)", line)
+            # Also detect non-# numeric headings from MinerU (e.g. "2.1. Title")
+            if not heading_match:
+                nm = _is_numeric_heading(line)
+                if nm:
+                    heading_text, leftover = nm
+                    flush_buffer()
+                    level = self._infer_level(heading_text, 2)
+                    new_section = Section(
+                        title=heading_text, level=level, blocks=[]
+                    )
+                    while (section_stack
+                           and section_stack[-1].level >= level):
+                        section_stack.pop()
+                    if not section_stack:
+                        sections.append(new_section)
+                    else:
+                        section_stack[-1].subsections.append(new_section)
+                    current_blocks = new_section.blocks
+                    section_stack.append(new_section)
+                    current_blocks.append(Block(
+                        type=BlockType.HEADING,
+                        content=heading_text,
+                        heading_level=level,
+                    ))
+                    # If MinerU merged body text onto the heading line,
+                    # push it back as a paragraph block.
+                    if leftover:
+                        current_blocks.append(Block(
+                            type=BlockType.PARAGRAPH,
+                            content=leftover,
+                        ))
+                    i += 1
+                    continue
+
             if heading_match:
                 flush_buffer()
                 md_level = len(heading_match.group(1))

@@ -93,3 +93,11 @@ Copy `.env.example` to `.env` and configure:
 ## Test PDF
 
 `pdf/2309.02211v5.pdf` — "Distributionally Robust Learning for Multi-Source Unsupervised Domain Adaptation" (statistics paper with formulas, figures, tables, citations).
+
+## Testing Conventions
+
+- **Always test with the SUDA Beamer template**: The template ZIP is at `pdf/SUDA-Beamer-Theme-main.zip`. Install it first with `paper2beamer template install pdf/SUDA-Beamer-Theme-main.zip --name suda`, then pass it to convert: `paper2beamer convert pdf/2309.02211v5.pdf --mode full --template <template_dir_path>`.
+- **Test both modes**: Always verify both `--mode abstract` and `--mode full` after making changes to the LLM converter or pipeline.
+- **Keep test outputs**: Do NOT delete test output ZIPs or directories after testing — the user wants to inspect them.
+- **Check frame count and content completeness**: After conversion, verify the output `.tex` has a reasonable number of frames (full mode: ~50+ frames) and that all sections of the paper appear.
+- **Rich Unicode errors are non-fatal**: On Windows, `UnicodeEncodeError` from Rich's spinner is a display issue only — the conversion completes fine. Use direct Python scripts for reliable output.

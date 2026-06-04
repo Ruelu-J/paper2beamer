@@ -11,6 +11,8 @@ VALID_EXTENSIONS = {
     ".ttf", ".otf", ".vf", ".tfm",
     ".bib", ".bst",
     ".tex", ".dtx", ".ins",
+    ".md", ".txt", ".markdown", ".rst",
+    ".log", ".aux", ".toc", ".out",
 }
 MAX_ZIP_SIZE = 50 * 1024 * 1024  # 50 MB
 MAX_ZIP_FILES = 50
@@ -85,10 +87,22 @@ class TemplateManager:
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         with zipfile.ZipFile(zip_path, "r") as zf:
+            # Find the common prefix directory in the ZIP
+            names = [n for n in zf.namelist() if not n.endswith("/")]
+            common_prefix = ""
+            if names:
+                parts = Path(names[0]).parts
+                if len(parts) > 1:
+                    common_prefix = parts[0] + "/"
             for member in zf.infolist():
                 if member.filename.endswith("/"):
                     continue
-                target = dest_dir / Path(member.filename).name
+                # Strip the common prefix dir, preserve subdirs
+                rel_path = member.filename
+                if common_prefix and rel_path.startswith(common_prefix):
+                    rel_path = rel_path[len(common_prefix):]
+                target = dest_dir / rel_path
+                target.parent.mkdir(parents=True, exist_ok=True)
                 with zf.open(member) as src, open(target, "wb") as dst:
                     dst.write(src.read())
 

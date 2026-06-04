@@ -19,11 +19,10 @@ from paper2beamer.core.parser import MarkdownParser
 from paper2beamer.core.converter import BeamerConverter
 from paper2beamer.core.splitter import FrameSplitter
 from paper2beamer.core.compiler import LatexCompiler
-from paper2beamer.core.citations import CitationDetector
 from paper2beamer.core.templates import TemplateManager, TemplateValidationError
 from paper2beamer.cache.manager import CacheManager
 from paper2beamer.db.database import init_db, get_session_factory
-from paper2beamer.utils.file_utils import create_zip, collect_directory_files
+from paper2beamer.utils.file_utils import create_zip, collect_directory_files, collect_directory_recursive
 
 console = Console()
 
@@ -76,7 +75,6 @@ def convert(pdf_path, mode, output, template, mineru_mode, mineru_key, mineru_ur
             engine=settings.tex_engine,
             timeout=settings.latex_timeout,
         )
-        citation_detector = CitationDetector()
         cache_mgr = CacheManager(settings.cache_dir)
         output_mode = OutputMode(mode)
 
@@ -123,28 +121,37 @@ def convert(pdf_path, mode, output, template, mineru_mode, mineru_key, mineru_ur
             document = parser.parse(extract_result.markdown, extract_result.images_dir)
             progress.update(task, description=f"Parsed: {document.title[:60]}...")
 
-            # Step 4: Citations
-            task = progress.add_task("Extracting citations...", total=None)
-            citations, bib_text = citation_detector.extract(document)
-            progress.update(task, description=f"Found {len(citations)} citations")
-
-            # Step 5: Convert to Beamer
-            task = progress.add_task("Converting to Beamer...", total=None)
+            # Step 4: Resolve template directory
             template_dir = ""
             if template:
                 mgr = TemplateManager(settings.template_dir)
-                template_dir = mgr.install(template, f"cli-template-{uuid.uuid4().hex[:8]}")
+                tid = mgr.install(template, f"cli-template-{uuid.uuid4().hex[:8]}")
+                template_dir = str(Path(settings.template_dir) / tid)
             if not template_dir:
                 template_dir = str(
                     Path(__file__).parent.parent.parent / "templates" / "default"
                 )
 
-            beamer_tex = converter.convert(document, template_dir, output_mode)
-            progress.update(task, description="Beamer LaTeX generated")
+            # Step 6: Convert to Beamer
+            # Use LLM converter when API key is available (template-aware)
+            task = progress.add_task("Converting to Beamer...", total=None)
+            from paper2beamer.core.llm_converter import LLMBeamerConverter
+            llm_converter = LLMBeamerConverter()
+            use_llm = llm_converter.enabled
+            if use_llm:
+                progress.update(task, description="Generating with LLM (template-aware)...")
+                beamer_tex = await llm_converter.convert(
+                    document, Path(template_dir), output_mode
+                )
+                progress.update(task, description="LLM Beamer generation complete")
+            else:
+                beamer_tex = converter.convert(document, template_dir, output_mode)
+                progress.update(task, description="Beamer LaTeX generated")
 
-            # Step 6: Split frames
-            task = progress.add_task("Splitting frames...", total=None)
-            beamer_tex = splitter.split(beamer_tex)
+            # Step 7: Split frames (skip for LLM output — already well-structured)
+            if not use_llm:
+                task = progress.add_task("Splitting frames...", total=None)
+                beamer_tex = splitter.split(beamer_tex)
 
             # Step 7: Compile
             task = progress.add_task("Compiling LaTeX...", total=None)
@@ -156,33 +163,50 @@ def convert(pdf_path, mode, output, template, mineru_mode, mineru_key, mineru_ur
                 output_dir=str(compile_dir),
                 template_dirs=[template_dir],
                 images_dir=extract_result.images_dir,
-                bib_content=bib_text if output_mode == OutputMode.FULL else "",
             )
 
+            pdf_skipped = False
             if not pdf_bytes:
-                console.print("[red]LaTeX compilation failed![/red]")
-                console.print(log_text[-2000:])
-                return
+                if "not found" in log_text or "找不到" in log_text:
+                    pdf_skipped = True
+                    console.print("[yellow]latexmk not found — packaging .tex without .pdf[/yellow]")
+                else:
+                    console.print("[red]LaTeX compilation failed![/red]")
+                    console.print(log_text[-2000:])
+                    return
 
-            progress.update(task, description=f"Compilation successful! ({len(pdf_bytes):,} bytes)")
+            if pdf_bytes:
+                progress.update(task, description=f"Compilation successful! ({len(pdf_bytes):,} bytes)")
+            else:
+                progress.update(task, description="Compilation skipped (latexmk not found)")
 
             # Step 8: Package ZIP
             task = progress.add_task("Packaging output ZIP...", total=None)
             zip_files: dict[str, str | bytes] = {
-                "presentation.tex": beamer_tex,
-                "presentation.pdf": pdf_bytes,
+                "main.tex": beamer_tex,
                 "build.log": log_text,
                 "README.txt": (
                     f"Beamer presentation generated by paper2beamer\n"
+                    f"==============================================\n"
                     f"Paper: {document.title}\n"
                     f"Mode: {mode}\n"
                     f"Sections: {len(document.sections)}\n"
+                    f"Files:\n"
+                    f"  - main.tex          : Beamer LaTeX source\n"
+                    f"  - presentation.pdf  : {'NOT GENERATED (latexmk not found)' if pdf_skipped else 'Compiled presentation'}\n"
+                    f"  - build.log         : LaTeX compilation log\n"
+                    f"  - images/           : Extracted figures\n"
                 ),
             }
-            if bib_text:
-                zip_files["references.bib"] = bib_text
+            if pdf_bytes:
+                zip_files["presentation.pdf"] = pdf_bytes
             img_files = collect_directory_files(extract_result.images_dir, prefix="images/")
             zip_files.update(img_files)
+            # Include ALL template files (fonts, figs, sty, etc.) except main.tex
+            tpl_files = collect_directory_recursive(
+                template_dir, prefix="", exclude_names={"main.tex"}
+            )
+            zip_files.update(tpl_files)
 
             create_zip(output, zip_files)
 
@@ -190,7 +214,6 @@ def convert(pdf_path, mode, output, template, mineru_mode, mineru_key, mineru_ur
         console.print(f"  Title: {document.title}")
         console.print(f"  Authors: {', '.join(document.authors[:3])}")
         console.print(f"  Sections: {len(document.sections)}")
-        console.print(f"  Citations: {len(citations)}")
 
     asyncio.run(_run())
 

@@ -3,24 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>paper2beamer - {% block title %}Home{% endblock %}</title>
+    <title>paper2beamer — Convert Papers to Beamer Presentations</title>
     <link rel="stylesheet" href="/static/css/main.css">
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.1"></script>
 </head>
 <body>
-    <nav class="navbar">
-        <a href="/" class="brand">paper2beamer</a>
-        <div class="nav-links">
-            <a href="/">Convert</a>
-            <a href="/templates">Templates</a>
-            <a href="/settings">Settings</a>
-        </div>
-    </nav>
-    <main class="container">
-        {% block content %}{% endblock %}
-    </main>
-    <footer>
-        <p>paper2beamer — Convert academic papers into Beamer presentations</p>
-    </footer>
+    <div class="app-layout">
+        <aside class="sidebar">
+            {% block sidebar %}{% endblock %}
+        </aside>
+        <main class="main-content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    <script>
+        // Mode tab switching
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('mode-tab')) {
+                document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                document.getElementById('form-mode').value = e.target.dataset.mode;
+            }
+        });
+        // MinerU mode: show/hide local URL
+        document.addEventListener('change', function(e) {
+            if (e.target.id === 'mineru_mode') {
+                var urlGroup = document.getElementById('local-url-group');
+                urlGroup.style.display = e.target.value === 'cloud' ? 'none' : '';
+            }
+        });
+        // Drag and drop
+        document.addEventListener('DOMContentLoaded', function() {
+            var dropArea = document.querySelector('.upload-drop-area');
+            if (!dropArea) return;
+            ['dragenter', 'dragover'].forEach(function(evt) {
+                dropArea.addEventListener(evt, function(e) { e.preventDefault(); dropArea.classList.add('drag-over'); });
+            });
+            ['dragleave', 'drop'].forEach(function(evt) {
+                dropArea.addEventListener(evt, function(e) { e.preventDefault(); dropArea.classList.remove('drag-over'); });
+            });
+            dropArea.addEventListener('drop', function(e) {
+                var files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    document.getElementById('file').files = files;
+                }
+            });
+        });
+    </script>
 </body>
 </html>

@@ -19,10 +19,18 @@ class Settings(BaseSettings):
     output_dir: str = "./data/outputs"
     template_dir: str = "./data/templates"
 
+    # LLM (optional — for better slide quality)
+    llm_api_key: str = ""
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_model: str = "gpt-4o"
+
     # LaTeX
     tex_engine: str = "pdflatex"
-    latex_timeout: int = 120
+    latex_timeout: int = 300
     latex_runs: int = 2
+    # How many times the LLM may retry fixing compile errors before giving
+    # up. Each attempt = 1 LLM call + 1 latexmk run.
+    llm_fix_attempts: int = 5
 
     # Database
     database_url: str = "sqlite+aiosqlite:///./data/paper2beamer.db"

@@ -5,23 +5,22 @@ import datetime
 import asyncio
 from pathlib import Path
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse
 
-from paper2beamer.api.dependencies import get_db
 from paper2beamer.api.schemas import UploadResponse
 from paper2beamer.config import settings
 from paper2beamer.db.models import Job, JobStatus
-from paper2beamer.core.hashing import hash_pdf
-from paper2beamer.core.models import OutputMode
+from paper2beamer.core.hashing import hash_bytes
 
 router = APIRouter()
 
 MAX_PDF_SIZE = settings.max_upload_size_mb * 1024 * 1024
 
 
-@router.post("/upload", response_model=UploadResponse)
+@router.post("/upload")
 async def upload_pdf(
+    request: Request,
     file: UploadFile = File(...),
     mode: str = Form(default="full"),
     template_id: str | None = Form(default=None),
@@ -49,7 +48,7 @@ async def upload_pdf(
     pdf_path = pdf_dir / f"{job_id}.pdf"
     pdf_path.write_bytes(content)
 
-    pdf_hash = hash_pdf(bytes(content))
+    pdf_hash = hash_bytes(content)
 
     session_factory = get_session_factory()
     async with session_factory() as session:
@@ -77,6 +76,22 @@ async def upload_pdf(
             bypass_cache=bypass_cache,
         )
     )
+
+    # Return HTML for htmx, JSON otherwise
+    is_htmx = request.headers.get("HX-Request") == "true"
+    if is_htmx:
+        return HTMLResponse(f"""<div class="job-card" id="result-area"
+    hx-get="/api/jobs/{job_id}/html"
+    hx-trigger="load, every 2s"
+    hx-swap="innerHTML">
+    <h3>{file.filename}</h3>
+    <div class="job-meta">
+        <span>Mode: {mode}</span>
+        <span class="status-badge pending">queued</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:5%"></div></div>
+    <p style="font-size:0.85rem;color:#888;">Starting extraction...</p>
+</div>""")
 
     return UploadResponse(
         job_id=job_id,
