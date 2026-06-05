@@ -2,7 +2,6 @@
 
 Convert academic papers (PDF) into professional Beamer (LaTeX) presentations — fully automated.
 
-> Upload a PDF → get a `.zip` with compilable `.tex`, compiled `.pdf`, images, and build log.
 
 ## Features
 
@@ -19,7 +18,7 @@ Convert academic papers (PDF) into professional Beamer (LaTeX) presentations —
 ### Prerequisites
 
 - Python 3.10+
-- LaTeX distribution with `latexmk` ([TeX Live](https://tug.org/texlive/) recommended)
+- **LaTeX distribution** with `latexmk` — see [LaTeX Installation](#latex-installation) below
 - [MinerU Cloud API key](https://mineru.net/apiManage/token) (free registration)
 - LLM API key (e.g. [SiliconFlow](https://siliconflow.cn), [DeepSeek](https://platform.deepseek.com), or [OpenAI](https://platform.openai.com))
 
@@ -33,7 +32,7 @@ pip install -e .
 
 ### Web UI (recommended)
 
-The web UI lets you configure everything on the page — no `.env` file needed.
+The web UI lets you configure everything on the page — no `.env` file needed. **LaTeX must be installed separately** (see [LaTeX Installation](#latex-installation)).
 
 ```bash
 paper2beamer serve --port 8000
@@ -119,12 +118,50 @@ SECRET_KEY=change-me-in-production
 
 paper2beamer uses the OpenAI-compatible `/chat/completions` endpoint. Any provider that supports this API works. Common options:
 
-- [SiliconFlow](https://siliconflow.cn) — `LLM_BASE_URL=https://api.siliconflow.cn/v1`
-- [DeepSeek](https://platform.deepseek.com) — `LLM_BASE_URL=https://api.deepseek.com/v1`
-- [OpenAI](https://platform.openai.com) — `LLM_BASE_URL=https://api.openai.com/v1`
-- [Groq](https://console.groq.com) — `LLM_BASE_URL=https://api.groq.com/openai/v1`
-
 Set `LLM_MODEL` to any model ID your provider supports. In the web UI, type the model name directly in the text field.
+
+## LaTeX Installation
+
+The pipeline compiles `.tex` to `.pdf` via `latexmk`, which requires a TeX distribution. If `latexmk` is not found, the output ZIP will still include the `.tex` file (you can compile it later), but the `.pdf` will be skipped.
+
+### Windows
+
+Install [MiKTeX](https://miktex.org/download) or [TeX Live](https://tug.org/texlive/windows.html). After installation, ensure `latexmk` is on your PATH:
+
+```powershell
+# Verify installation
+latexmk --version
+```
+
+### macOS
+
+Install [MacTeX](https://tug.org/mactex/):
+
+```bash
+brew install --cask mactex
+# or download from https://tug.org/mactex/mactex-download.html
+```
+
+### Linux (Ubuntu/Debian)
+
+```bash
+sudo apt update
+sudo apt install texlive-full latexmk
+```
+
+For a minimal install (faster, ~500 MB instead of ~5 GB):
+
+```bash
+sudo apt install texlive-latex-recommended texlive-latex-extra \
+    texlive-fonts-recommended texlive-science latexmk
+```
+
+### Verify
+
+```bash
+latexmk --version
+# Should print version info, e.g. "Latexmk, John Collins, ..."
+```
 
 ## Web UI
 
@@ -142,6 +179,7 @@ Set `LLM_MODEL` to any model ID your provider supports. In the web UI, type the 
 | `GET` | `/api/jobs/{id}` | JSON job status |
 | `GET` | `/api/jobs/{id}/html` | HTML fragment (htmx polling) |
 | `GET` | `/api/jobs/{id}/download` | Download result ZIP |
+| `GET` | `/api/jobs/{id}/download/pdf` | Download compiled PDF |
 | `GET/PUT` | `/api/settings` | Read/update configuration |
 | `GET/POST/DELETE` | `/api/templates` | Manage Beamer templates |
 
@@ -214,10 +252,7 @@ python test_e2e.py
 ## Requirements
 
 - Python 3.10+
-- LaTeX distribution with `latexmk` (TeX Live recommended)
-- MinerU Cloud API key (free at [mineru.net](https://mineru.net))
-- (Optional) LLM API key for enhanced slide quality
+- LaTeX distribution with `latexmk` — [Installation guide](#latex-installation)
+- MinerU Cloud API key (free registration at [mineru.net](https://mineru.net))
+- LLM API key for enhanced slide quality
 
-## License
-
-MIT

@@ -130,8 +130,8 @@
           hx-swap="innerHTML"
           hx-indicator="#upload-spinner">
         <input type="hidden" name="mode" id="form-mode" value="full">
-        <div class="upload-drop-area">
-            <div class="upload-icon">
+        <div class="upload-drop-area" id="drop-area">
+            <div class="upload-icon" id="upload-icon">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#0066cc" stroke-width="1.5">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                     <polyline points="14 2 14 8 20 8"/>
@@ -139,10 +139,19 @@
                     <polyline points="9 15 12 18 15 15"/>
                 </svg>
             </div>
-            <p class="upload-text">Drag & drop a PDF here or click to browse</p>
+            <p class="upload-text" id="upload-text">Drag & drop a PDF here or click to browse</p>
             <input type="file" id="file" name="file" accept=".pdf" required
-                   class="file-input">
-            <small>Maximum {{ max_upload_mb }}MB. Supported: math/statistics papers.</small>
+                   class="file-input" onchange="showSelectedFile()">
+            <small id="upload-hint">Maximum {{ max_upload_mb }}MB. Supported: math/statistics papers.</small>
+            <div class="file-selected" id="file-selected" style="display:none;">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#28a745" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <path d="M9 15l2 2 4-4"/>
+                </svg>
+                <span class="file-name" id="file-name"></span>
+                <span class="file-size" id="file-size"></span>
+            </div>
         </div>
         <div style="text-align:center;margin-top:1rem;">
             <button type="submit" class="btn-convert">Convert to Beamer</button>
@@ -164,4 +173,54 @@
 <div id="job-history" class="job-history"
      hx-get="/api/jobs/recent" hx-trigger="load" hx-swap="innerHTML">
 </div>
+
+<script>
+function showSelectedFile() {
+    const file = document.getElementById('file').files[0];
+    const dropArea = document.getElementById('drop-area');
+    const uploadIcon = document.getElementById('upload-icon');
+    const uploadText = document.getElementById('upload-text');
+    const uploadHint = document.getElementById('upload-hint');
+    const fileSelected = document.getElementById('file-selected');
+    const fileName = document.getElementById('file-name');
+    const fileSize = document.getElementById('file-size');
+
+    if (file) {
+        dropArea.classList.add('has-file');
+        uploadIcon.style.display = 'none';
+        uploadText.style.display = 'none';
+        uploadHint.style.display = 'none';
+        fileSelected.style.display = 'flex';
+        fileName.textContent = file.name;
+        const kb = file.size / 1024;
+        fileSize.textContent = kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB' : Math.round(kb) + ' KB';
+    } else {
+        dropArea.classList.remove('has-file');
+        uploadIcon.style.display = '';
+        uploadText.style.display = '';
+        uploadHint.style.display = '';
+        fileSelected.style.display = 'none';
+    }
+}
+
+// Also support drag & drop
+const dropArea = document.getElementById('drop-area');
+dropArea.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    dropArea.classList.add('drag-over');
+});
+dropArea.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    dropArea.classList.remove('drag-over');
+});
+dropArea.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dropArea.classList.remove('drag-over');
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        document.getElementById('file').files = files;
+        showSelectedFile();
+    }
+});
+</script>
 {% endblock %}

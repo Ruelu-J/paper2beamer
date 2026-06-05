@@ -178,6 +178,8 @@ async def get_job_status_html(request: Request, job_id: str):
         if status_val == "completed":
             timeline = _render_step_timeline(steps)
             download_url = f"/api/jobs/{job_id}/download"
+            pdf_url = f"/api/jobs/{job_id}/download/pdf" if job.output_pdf_path else ""
+            pdf_btn = f'<a href="{pdf_url}" class="download-btn pdf-btn" download>&#128196; Download PDF</a>' if pdf_url else ""
             return HTMLResponse(f"""<div class="job-card completed" id="result-area">
     <h3>{pdf_name}</h3>
     <div class="job-meta">
@@ -189,7 +191,10 @@ async def get_job_status_html(request: Request, job_id: str):
         <div class="progress-fill" style="width:100%"></div>
     </div>
     {timeline}
-    <a href="{download_url}" class="download-btn" download>&#10515; Download ZIP</a>
+    <div class="download-buttons">
+        <a href="{download_url}" class="download-btn" download>&#128230; Download ZIP</a>
+        {pdf_btn}
+    </div>
 </div>""")
 
         # --- FAILED ---
@@ -325,6 +330,29 @@ async def download_result(job_id: str):
             path=job.output_zip_path,
             filename="presentation.zip",
             media_type="application/zip",
+        )
+
+
+@router.get("/jobs/{job_id}/download/pdf")
+async def download_pdf(job_id: str):
+    from paper2beamer.db.database import get_session_factory
+
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        job = await session.get(Job, job_id)
+        if not job:
+            raise HTTPException(404, "Job not found.")
+
+        if job.status.value != "completed":
+            raise HTTPException(409, "Job is not yet completed.")
+
+        if not job.output_pdf_path:
+            raise HTTPException(404, "PDF not available. LaTeX may not be installed.")
+
+        return FileResponse(
+            path=job.output_pdf_path,
+            filename="presentation.pdf",
+            media_type="application/pdf",
         )
 
 
